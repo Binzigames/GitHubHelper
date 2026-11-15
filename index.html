@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitHub Helper</title>
+<style>
+:root{--bg:#0b0f14;--panel:#12171e;--panel2:#1a212b;--line:#262e3a;--text:#e8eef5;--mute:#8693a3;--accent:#4c8dff;--accent2:#8b5cf6;--green:#3fb950;--red:#ff6b64;--yellow:#e3b341;--addbg:rgba(46,160,67,.16);--delbg:rgba(248,81,73,.15);--shadow:0 12px 40px rgba(0,0,0,.45);--r:10px}
+@media (prefers-color-scheme:light){:root{--bg:#f4f6fa;--panel:#fff;--panel2:#eef1f6;--line:#dde3ec;--text:#1b2330;--mute:#5f6c7d;--accent:#2563eb;--accent2:#7c3aed;--green:#1a7f37;--red:#d1242f;--yellow:#9a6700;--addbg:#e3f8e9;--delbg:#ffe8e6;--shadow:0 12px 40px rgba(20,30,50,.18)}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(1200px 500px at 85% -10%,rgba(76,141,255,.10),transparent 60%),var(--bg);color:var(--text);font:14px/1.45 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+::selection{background:rgba(76,141,255,.35)}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:var(--mute);background-clip:content-box;border:2px solid transparent}
+button,input,textarea{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 14px;cursor:pointer;transition:background .15s,border-color .15s,transform .05s,box-shadow .15s}
+button:hover{border-color:var(--mute)}
+button:active{transform:translateY(1px)}
+button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff;font-weight:600;box-shadow:0 4px 14px rgba(76,141,255,.35)}
+button.primary:hover{filter:brightness(1.08);border-color:transparent}
+button.danger{color:var(--red)}
+button:disabled{opacity:.45;cursor:default;box-shadow:none;transform:none}
+input[type=text],textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;transition:border-color .15s,box-shadow .15s}
+input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
+input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(76,141,255,.25)}
+.top{display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--line);height:56px;flex:none;box-shadow:0 2px 12px rgba(0,0,0,.18);position:relative;z-index:10}
+.tb{display:flex;flex-direction:column;justify-content:center;padding:0 18px;border:0;border-right:1px solid var(--line);border-radius:0;background:transparent;text-align:left;min-width:150px;box-shadow:none}
+.tb small{color:var(--mute);font-size:11px;letter-spacing:.02em}
+.tb b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.tb:hover{background:var(--panel2)}
+#bSync b{color:var(--accent)}
+.spacer{flex:1}
+.main{flex:1;display:flex;min-height:0}
+.side{width:350px;flex:none;border-right:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel);min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tab{flex:1;padding:11px;text-align:center;cursor:pointer;color:var(--mute);border-bottom:2px solid transparent;transition:color .15s,background .15s}
+.tab:hover{background:var(--panel2)}
+.tab.on{color:var(--text);border-image:linear-gradient(90deg,var(--accent),var(--accent2)) 1;font-weight:600}
+.list{flex:1;overflow:auto;min-height:0}
+.row{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;border-left:3px solid transparent;transition:background .12s}
+.row:hover{background:var(--panel2)}
+.row.sel{background:rgba(76,141,255,.14);border-left-color:var(--accent)}
+.row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .x{visibility:hidden;border:0;background:none;color:var(--mute);padding:0 6px;box-shadow:none}
+.row:hover .x{visibility:visible}
+.badge{font-size:11px;font-weight:700;width:20px;height:20px;line-height:20px;text-align:center;border-radius:6px;background:var(--panel2)}
+.A{color:var(--green)}.M{color:var(--yellow)}.D{color:var(--red)}.R{color:var(--accent)}.U{color:var(--red)}
+.listhead{padding:9px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;color:var(--mute);font-size:12px}
+.commitbox{border-top:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:8px;flex:none;background:var(--panel)}
+.commitbox textarea{resize:vertical;min-height:58px}
+.content{flex:1;display:flex;flex-direction:column;min-width:0}
+#meta{padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel);display:none}
+#meta .msg{white-space:pre-wrap;margin:4px 0 8px}
+#chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);border-radius:14px;padding:2px 10px;font-size:12px;cursor:pointer;transition:background .15s}
+.chip:hover{background:var(--panel2)}
+.chip.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+#diff{flex:1;overflow:auto;font:12.5px/1.5 "Cascadia Mono",Consolas,monospace;min-height:0}
+.empty{color:var(--mute);text-align:center;margin-top:18vh;padding:0 20px}
+table.d{border-collapse:collapse;width:100%}
+table.d td{padding:0 10px;white-space:pre;vertical-align:top}
+td.ln{color:var(--mute);text-align:right;width:1%;user-select:none;min-width:44px;opacity:.7}
+tr.add{background:var(--addbg)}tr.del{background:var(--delbg)}
+tr.hunk td{color:var(--accent);background:rgba(76,141,255,.09)}
+tr.meta td{color:var(--mute)}
+.pop{position:absolute;top:58px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);z-index:20;width:350px;max-height:70vh;display:none;flex-direction:column;overflow:hidden}
+.pop.show{display:flex;animation:pop .14s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.pop .list{max-height:48vh}
+.pop .pad{padding:10px;border-bottom:1px solid var(--line);display:flex;gap:6px}
+.sect{padding:8px 12px 4px;font-size:11px;text-transform:uppercase;color:var(--mute);letter-spacing:.07em}
+.banner{background:linear-gradient(90deg,rgba(227,179,65,.16),rgba(139,92,246,.12));border-bottom:1px solid var(--yellow);padding:9px 18px;display:flex;gap:12px;align-items:center;flex:none}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:70vw;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:11px 18px;box-shadow:var(--shadow);display:none;z-index:50;white-space:pre-wrap;max-height:40vh;overflow:auto}
+#toast.err{border-left-color:var(--red)}
+.ov{position:fixed;inset:0;background:rgba(5,8,12,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:40;animation:fade .15s}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.dlg{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:480px;max-width:92vw;box-shadow:var(--shadow);animation:pop .18s ease-out}
+.dlg h3{margin:0 0 14px;font-size:17px}
+.dlg label{display:block;margin:10px 0 4px;color:var(--mute);font-size:12px}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.dlg .fr{display:flex;gap:6px}
+.welcome{margin:auto;text-align:center;max-width:500px;padding:20px}
+.welcome h1{font-weight:700;font-size:34px;margin:10px 0 6px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.welcome .logo{width:76px;height:76px;margin:0 auto;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:38px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 14px 40px rgba(76,141,255,.4)}
+.welcome .btns{display:flex;flex-direction:column;gap:10px;margin-top:24px}
+.welcome button{padding:12px;border-radius:10px}
+.pill{background:var(--accent);color:#fff;border-radius:10px;padding:0 8px;font-size:11px;font-weight:600}
+.up{color:var(--accent);font-size:11px}
+.code{font:700 30px "Cascadia Mono",Consolas,monospace;letter-spacing:.18em;text-align:center;padding:16px;background:var(--bg);border:1px dashed var(--accent);border-radius:12px;user-select:all;margin:12px 0}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="banner"></div>
+<div class="top" id="top"></div>
+<div class="pop" id="popRepo" style="left:0"></div>
+<div class="pop" id="popBranch" style="left:200px"></div>
+<div class="pop" id="popMenu" style="right:8px;width:260px"></div>
+<div class="main" id="main"></div>
+<div id="toast"></div>
+
+<script>
+const TOKEN = "__TOKEN__";
+const S = { app: null, repo: null, st: null, tab: 'changes', sel: null, commit: null, log: [], unpushed: [], branches: null, busy: '', stJson: '' };
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const base = p => p.split(/[\\/]/).filter(Boolean).pop();
+
+/* ---------- i18n ----------
+   Source strings are Ukrainian (the key); I18N.en holds the English translation.
+   Placeholders look like {n}. */
+const I18N = { en: {
+  'Не вдалося підключитись до локального сервера: ': 'Could not connect to the local server: ',
+  'Огляд…': 'Browse…', 'Скасувати': 'Cancel',
+  'Git не встановлено — без нього програма не працює.': 'Git is not installed — the app cannot work without it.',
+  'Встановити Git': 'Install Git',
+  'Встановлюю… це може зайняти хвилину': 'Installing… this may take a minute', 'Встановлено ✓': 'Installed ✓',
+  'після встановлення перезапустіть програму': 'restart the app after installing',
+  'Відкрито вікно встановлення (winget)': 'Installer window opened (winget)',
+  "Git не знає ваше ім'я та email (потрібні для комітів).": "Git doesn't know your name and email (needed for commits).",
+  'Налаштувати': 'Set up',
+  'Ви не увійшли в GitHub — потрібно для публікації репозиторіїв і роботи з приватними.': 'You are not signed in to GitHub — needed to publish repositories and use private ones.',
+  'Увійти через GitHub': 'Sign in with GitHub',
+  'Ваші дані для комітів': 'Your details for commits', "Ім'я": 'Name',
+  'Email (той самий, що на GitHub)': 'Email (same as on GitHub)', 'Зберегти': 'Save', 'Збережено': 'Saved',
+  'Опублікувати репозиторій': 'Publish repository', 'додати на GitHub': 'add to GitHub',
+  'Опублікувати гілку': 'Publish branch', 'Опублікувати': 'Publish',
+  'Репозиторій': 'Repository', '— не обрано —': '— none selected —', 'Гілка': 'Branch',
+  'Зачекайте…': 'Please wait…', 'синхронізація': 'sync',
+  'Увійти': 'Sign in', 'Вхід у GitHub / вихід': 'GitHub sign in / out', 'Мова / Language': 'Language / Мова',
+  'Додати': 'Add', 'Клонувати': 'Clone', 'Створити': 'Create',
+  'Прибрати зі списку': 'Remove from list', 'Список порожній': 'The list is empty',
+  'Додати локальний репозиторій': 'Add a local repository', 'Папка з git-репозиторієм': 'Folder with a git repository',
+  'Клонувати репозиторій': 'Clone repository', 'URL або owner/repo': 'URL or owner/repo', 'Куди клонувати': 'Clone into',
+  'Клонування…': 'Cloning…', 'Готово': 'Done',
+  'Створити новий репозиторій': 'Create a new repository', 'Папка (буде створена, якщо не існує)': 'Folder (created if it does not exist)',
+  'Фільтр гілок…': 'Filter branches…', '+ Нова': '+ New', 'Локальні': 'Local', 'На сервері': 'On server',
+  'Влити в поточну': 'Merge into current', 'Видалити': 'Delete',
+  'Перемкнено на {name}': 'Switched to {name}', 'Влити "{name}" у "{cur}"?': 'Merge "{name}" into "{cur}"?', 'Злито': 'Merged',
+  'Видалити гілку "{name}"?': 'Delete branch "{name}"?', 'Видалити примусово?': 'Force delete?', 'Гілку видалено': 'Branch deleted',
+  'Нова гілка': 'New branch', 'Назва (від поточної: {cur})': 'Name (from current: {cur})', 'Гілку створено': 'Branch created',
+  'Відкрити на GitHub': 'Open on GitHub', 'Немає remote': 'No remote', 'Створити Pull Request': 'Create Pull Request',
+  'Відкрити у Провіднику': 'Open in Explorer', 'Відкрити в VS Code': 'Open in VS Code', 'Відкрити термінал': 'Open terminal',
+  'Stash (відкласти зміни)': 'Stash (set changes aside)', 'Stash pop (повернути)': 'Stash pop (restore)', 'Повернуто': 'Restored',
+  'Скасувати останній коміт (залишити зміни)': 'Undo last commit (keep changes)',
+  'Скасувати останній коміт? Зміни залишаться у файлах.': 'Undo the last commit? Changes will stay in your files.',
+  'Коміт скасовано': 'Commit undone', 'Скасувати злиття (merge --abort)': 'Abort merge (merge --abort)', 'Скасовано': 'Aborted',
+  'Додати remote вручну…': 'Add remote manually…', 'Мої дані для комітів…': 'My commit details…',
+  'GitHub: @{user} ✓ — вийти': 'GitHub: @{user} ✓ — sign out', 'Увійти в GitHub': 'Sign in to GitHub',
+  'Встановити GitHub CLI (gh)': 'Install GitHub CLI (gh)', 'Відкрито вікно встановлення': 'Installer window opened',
+  'Додати remote "origin"': 'Add remote "origin"', 'URL репозиторію на GitHub': 'Repository URL on GitHub', 'Додано': 'Added',
+  'Для створення репозиторію на GitHub потрібен GitHub CLI (gh). Встановити? Якщо репозиторій уже створено на github.com — скасуйте і скористайтесь меню ⋯ → "Додати remote вручну".':
+    'Creating a repository on GitHub requires GitHub CLI (gh). Install it? If the repository already exists on github.com, cancel and use the ⋯ menu → "Add remote manually".',
+  'Спочатку зробіть хоча б один коміт': 'Make at least one commit first',
+  'Опублікувати на GitHub': 'Publish to GitHub', 'Назва репозиторію': 'Repository name', 'Приватний репозиторій': 'Private repository',
+  'Опубліковано!': 'Published!',
+  'Для входу потрібен GitHub CLI (gh). Встановити зараз?': 'Signing in requires GitHub CLI (gh). Install it now?',
+  'Запускаю вхід…': 'Starting sign-in…', 'Вхід у GitHub': 'Sign in to GitHub',
+  'У браузері має відкритись github.com. Введіть цей код:': 'github.com should open in your browser. Enter this code:',
+  'Чекаю на підтвердження в браузері…': 'Waiting for confirmation in the browser…',
+  'Копіювати код': 'Copy code', 'Скопійовано': 'Copied', 'Відкрити GitHub': 'Open GitHub',
+  'Вхід виконано ✓': 'Signed in ✓', 'Не вдалося увійти': 'Sign-in failed',
+  'Вийти з GitHub?': 'Sign out of GitHub?', 'Ви вийшли з GitHub': 'Signed out of GitHub',
+  'Історія': 'History', 'Зміни': 'Changes', 'Оберіть файл': 'Select a file',
+  '{n} змінених файлів': '{n} changed files', 'йде злиття': 'merge in progress',
+  'Скасувати зміни': 'Discard changes', 'Немає змін ✨': 'No changes ✨',
+  'Короткий опис (summary)': 'Summary', "Опис (необов'язково)": 'Description (optional)',
+  'Коміт у': 'Commit to', 'Останній: {s}': 'Last: {s}',
+  'Скасувати зміни у "{p}"? Це незворотньо.': 'Discard changes in "{p}"? This cannot be undone.', 'Зміни скасовано': 'Changes discarded',
+  'Напишіть короткий опис коміту': 'Write a short commit summary', 'Коміт створено ✓': 'Commit created ✓',
+  "Змін немає. Редагуйте файли у своєму редакторі — вони з'являться тут автоматично.": 'No changes. Edit files in your editor — they will show up here automatically.',
+  'Немає відображуваних змін (порожній або бінарний файл)': 'Nothing to display (empty or binary file)',
+  'щойно': 'just now', '{n} хв': '{n} min', '{n} год': '{n} h', '{n} дн': '{n} d',
+  'не відправлено': 'not pushed', 'Комітів ще немає': 'No commits yet', 'Порожній коміт': 'Empty commit',
+  'Робіть коміти, гілки та синхронізацію з GitHub без командного рядка.': 'Make commits, branches and sync with GitHub without the command line.',
+  '⬇ Клонувати репозиторій з GitHub': '⬇ Clone a repository from GitHub',
+  '📁 Додати наявну папку з проєктом': '📁 Add an existing project folder',
+  '✚ Створити новий репозиторій': '✚ Create a new repository',
+} };
+let LANG = 'uk';
+try { LANG = localStorage.getItem('lang') || ((navigator.language || '').toLowerCase().startsWith('uk') ? 'uk' : 'en'); } catch (e) { }
+const t = (k, p) => {
+  let s = (LANG === 'en' && I18N.en[k]) || k;
+  return p ? s.replace(/\{(\w+)\}/g, (_, n) => p[n] ?? '') : s;
+};
+function setLang(l) {
+  LANG = l; try { localStorage.setItem('lang', l); } catch (e) { }
+  document.documentElement.lang = l;
+  closePops(); $('#main').innerHTML = '';
+  renderBanner(); renderAll(); if (S.repo) refresh(true);
+}
+
+async function api(name, data = {}) {
+  const r = await fetch('/api/' + name, { method: 'POST', headers: { 'X-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const j = await r.json().catch(() => ({ error: 'Bad response' }));
+  if (!r.ok) throw new Error(j.error || 'Error');
+  return j;
+}
+const R = (name, data = {}) => api(name, { repo: S.repo, ...data });
+
+let toastT;
+function toast(msg, err) {
+  const el = $('#toast'); el.textContent = msg; el.className = err ? 'err' : ''; el.style.display = 'block';
+  clearTimeout(toastT); toastT = setTimeout(() => el.style.display = 'none', err ? 9000 : 3500);
+}
+async function run(label, fn, ok) {
+  if (S.busy) return;
+  S.busy = label; renderTop();
+  try { const r = await fn(); if (ok) toast(typeof ok === 'function' ? ok(r) : ok); return r; }
+  catch (e) { toast(e.message, true); }
+  finally { S.busy = ''; await refresh(true); }
+}
+
+/* ---------- modal ---------- */
+function modal(title, fields, okLabel = 'OK') {
+  return new Promise(res => {
+    const ov = document.createElement('div'); ov.className = 'ov';
+    ov.innerHTML = `<div class="dlg"><h3>${esc(title)}</h3>` + fields.map(f => f.type === 'checkbox'
+      ? `<label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="f_${f.id}" ${f.value ? 'checked' : ''}> ${esc(f.label)}</label>`
+      : f.type === 'note' ? `<p style="color:var(--mute)">${esc(f.label)}</p>`
+      : `<label>${esc(f.label)}</label><div class="fr"><input type="text" id="f_${f.id}" value="${esc(f.value || '')}" placeholder="${esc(f.placeholder || '')}">${f.browse ? `<button data-b="${f.id}">${esc(t('Огляд…'))}</button>` : ''}</div>`).join('')
+      + `<div class="acts"><button id="mc">${esc(t('Скасувати'))}</button><button class="primary" id="mo">${esc(okLabel)}</button></div></div>`;
+    document.body.appendChild(ov);
+    const done = v => { ov.remove(); res(v); };
+    ov.querySelectorAll('[data-b]').forEach(b => b.onclick = async () => {
+      const inp = ov.querySelector('#f_' + b.dataset.b);
+      try { const r = await api('pickfolder', { start: inp.value }); if (r.path) inp.value = r.path; } catch (e) { toast(e.message, true); }
+    });
+    const submit = () => { const v = {}; fields.forEach(f => { if (f.type === 'note') return; const el = ov.querySelector('#f_' + f.id); v[f.id] = f.type === 'checkbox' ? el.checked : el.value.trim(); }); done(v); };
+    ov.querySelector('#mo').onclick = submit; ov.querySelector('#mc').onclick = () => done(null);
+    ov.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') submit(); if (e.key === 'Escape') done(null); });
+    const first = ov.querySelector('input'); first && first.focus();
+  });
+}
+
+/* ---------- boot ---------- */
+async function boot() {
+  document.documentElement.lang = LANG;
+  S.app = await api('state');
+  const last = localStorage.getItem('lastRepo');
+  if (last && S.app.repos.includes(last)) S.repo = last; else if (S.app.repos.length) S.repo = S.app.repos[0];
+  renderBanner(); renderAll();
+  if (S.repo) await refresh(true);
+}
+
+async function installDep(what) {
+  toast(t('Встановлюю… це може зайняти хвилину'));
+  try { await api('install', { what }); S.app = await api('state'); renderBanner(); renderTop(); toast(t('Встановлено ✓')); } catch (e) { toast(e.message, true); }
+}
+const installGh = () => installDep('gh');
+
+function renderBanner() {
+  const a = S.app, b = $('#banner'); b.className = ''; b.innerHTML = '';
+  if (!a) return;
+  if (!a.git) { b.className = 'banner'; b.innerHTML = `<span>${esc(t('Git не встановлено — без нього програма не працює.'))}</span><button class="primary" id="bi">${esc(t('Встановити Git'))}</button>`; $('#bi').onclick = () => installDep('git'); }
+  else if (!a.userName || !a.userEmail) { b.className = 'banner'; b.innerHTML = `<span>${esc(t("Git не знає ваше ім'я та email (потрібні для комітів)."))}</span><button class="primary" id="bi">${esc(t('Налаштувати'))}</button>`; $('#bi').onclick = setIdentity; }
+  else if (!a.ghAuthed) { b.className = 'banner'; b.innerHTML = `<span>${esc(t('Ви не увійшли в GitHub — потрібно для публікації репозиторіїв і роботи з приватними.'))}</span><button class="primary" id="bi">${esc(t('Увійти через GitHub'))}</button>`; $('#bi').onclick = ghLogin; }
+}
+async function setIdentity() {
+  const v = await modal(t('Ваші дані для комітів'), [{ id: 'name', label: t("Ім'я"), value: S.app.userName }, { id: 'email', label: t('Email (той самий, що на GitHub)'), value: S.app.userEmail }], t('Зберегти'));
+  if (!v || !v.name || !v.email) return;
+  try { await api('setIdentity', v); S.app = await api('state'); renderBanner(); toast(t('Збережено')); } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- GitHub login ---------- */
+async function ghLogin() {
+  closePops();
+  if (!S.app.gh) { if (confirm(t('Для входу потрібен GitHub CLI (gh). Встановити зараз?'))) installGh(); return; }
+  let r;
+  try { toast(t('Запускаю вхід…')); r = await api('ghlogin'); } catch (e) { toast(e.message, true); return; }
+  const ov = document.createElement('div'); ov.className = 'ov';
+  ov.innerHTML = `<div class="dlg"><h3>${esc(t('Вхід у GitHub'))}</h3><p style="margin:0;color:var(--mute)">${esc(t('У браузері має відкритись github.com. Введіть цей код:'))}</p><div class="code">${esc(r.code)}</div><p style="margin:0;color:var(--mute)">⏳ ${esc(t('Чекаю на підтвердження в браузері…'))}</p><div class="acts"><button id="gCopy">${esc(t('Копіювати код'))}</button><button id="gOpen">${esc(t('Відкрити GitHub'))}</button><button id="gCancel">${esc(t('Скасувати'))}</button></div></div>`;
+  document.body.appendChild(ov);
+  let timer, closed = false;
+  const close = () => { closed = true; clearInterval(timer); ov.remove(); };
+  ov.querySelector('#gCopy').onclick = () => navigator.clipboard.writeText(r.code).then(() => toast(t('Скопійовано'))).catch(() => { });
+  ov.querySelector('#gOpen').onclick = () => api('open', { what: 'url', url: r.url }).catch(e => toast(e.message, true));
+  ov.querySelector('#gCancel').onclick = () => { close(); api('ghloginCancel').catch(() => { }); };
+  navigator.clipboard.writeText(r.code).catch(() => { });
+  timer = setInterval(async () => {
+    try {
+      const s = await api('ghloginStatus'); if (closed) return;
+      if (s.state === 'done') { close(); S.app = await api('state'); renderBanner(); renderTop(); toast(t('Вхід виконано ✓')); }
+      else if (s.state === 'failed') { close(); toast(t('Не вдалося увійти') + (s.error ? ': ' + s.error : ''), true); }
+    } catch (e) { }
+  }, 2000);
+}
+async function ghLogout() {
+  closePops();
+  if (!confirm(t('Вийти з GitHub?'))) return;
+  try { await api('ghlogout'); S.app = await api('state'); renderBanner(); renderTop(); toast(t('Ви вийшли з GitHub')); } catch (e) { toast(e.message, true); }
+}
+const ghToggle = () => S.app.ghAuthed ? ghLogout() : ghLogin();
+
+/* ---------- refresh ---------- */
+async function refresh(force) {
+  if (!S.repo) return;
+  try {
+    const st = await R('status');
+    const j = JSON.stringify(st);
+    const changed = j !== S.stJson; S.stJson = j; S.st = st;
+    if (S.sel && !st.files.find(f => f.path === S.sel)) S.sel = null;
+    if (changed || force) {
+      renderTop(); renderSide();
+      if (S.tab === 'changes') { if (!S.sel && st.files.length) S.sel = st.files[0].path; showFileDiff(); }
+    }
+    if (force && S.tab === 'history') loadLog();
+  } catch (e) { if (force) toast(e.message, true); }
+}
+setInterval(() => { if (document.hasFocus() && !S.busy && S.repo) refresh(false); }, 3000);
+window.addEventListener('focus', () => refresh(false));
+
+/* ---------- render ---------- */
+function renderAll() { renderTop(); renderSide(); if (!S.repo) renderWelcome(); }
+
+function syncInfo() {
+  const s = S.st; if (!s) return { label: 'Fetch', act: 'fetch', sub: '' };
+  if (!s.remote) return { label: t('Опублікувати репозиторій'), act: 'publish', sub: t('додати на GitHub') };
+  if (!s.upstream) return { label: t('Опублікувати гілку'), act: 'push', sub: 'push -u' };
+  if (s.behind > 0) return { label: `Pull (${s.behind}↓)`, act: 'pull', sub: s.upstream };
+  if (s.ahead > 0) return { label: `Push (${s.ahead}↑)`, act: 'push', sub: s.upstream };
+  return { label: 'Fetch', act: 'fetch', sub: s.upstream };
+}
+
+function renderTop() {
+  const s = S.st, top = $('#top'), a = S.app || {};
+  const si = syncInfo();
+  top.innerHTML = `
+    <button class="tb" id="bRepo"><small>${esc(t('Репозиторій'))}</small><b>${S.repo ? esc(base(S.repo)) : esc(t('— не обрано —'))} ▾</b></button>
+    <button class="tb" id="bBranch" ${S.repo ? '' : 'disabled'}><small>${esc(t('Гілка'))}</small><b>${s ? esc(s.branch) : '—'} ▾</b></button>
+    <button class="tb" id="bSync" ${S.repo ? '' : 'disabled'} style="min-width:190px"><small>${S.busy ? esc(t('Зачекайте…')) : esc(si.sub || t('синхронізація'))}</small><b>${S.busy ? '<span class="spin"></span>' + esc(S.busy) : '⟳ ' + esc(si.label)}</b></button>
+    <div class="spacer"></div>
+    <button class="tb" id="bGh" style="min-width:130px;border-left:1px solid var(--line)" title="${esc(t('Вхід у GitHub / вихід'))}"><small>GitHub</small><b>${a.ghAuthed ? '✓ @' + esc(a.ghUser || '') : esc(t('Увійти'))}</b></button>
+    <button class="tb" id="bLang" style="min-width:60px;align-items:center" title="${esc(t('Мова / Language'))}"><b>${LANG === 'en' ? 'EN' : 'UA'}</b></button>
+    <button class="tb" id="bMenu" style="border-right:0;min-width:60px;align-items:center" ${S.repo ? '' : 'disabled'}><b>⋯</b></button>`;
+  $('#bRepo').onclick = e => { e.stopPropagation(); togglePop('popRepo', renderRepoPop); };
+  $('#bBranch').onclick = e => { e.stopPropagation(); togglePop('popBranch', renderBranchPop); };
+  $('#bMenu').onclick = e => { e.stopPropagation(); togglePop('popMenu', renderMenuPop); };
+  $('#bSync').onclick = doSync;
+  $('#bGh').onclick = ghToggle;
+  $('#bLang').onclick = () => setLang(LANG === 'en' ? 'uk' : 'en');
+  const b = $('#popBranch'); const rb = $('#bBranch').getBoundingClientRect(); b.style.left = rb.left + 'px';
+}
+document.addEventListener('click', e => { if (!e.target.closest('.pop')) closePops(); });
+function closePops() { document.querySelectorAll('.pop').forEach(p => p.classList.remove('show')); }
+function togglePop(id, fn) {
+  const p = $('#' + id), was = p.classList.contains('show'); closePops();
+  if (!was) { fn(p); p.classList.add('show'); }
+}
+
+function renderRepoPop(p) {
+  p.innerHTML = `<div class="pad"><button id="rAdd">${esc(t('Додати'))}</button><button id="rClone">${esc(t('Клонувати'))}</button><button id="rNew">${esc(t('Створити'))}</button></div><div class="list">${S.app.repos.map(r => `<div class="row ${r === S.repo ? 'sel' : ''}" data-r="${esc(r)}"><span class="nm" title="${esc(r)}">${esc(base(r))}</span><button class="x" data-rm="${esc(r)}" title="${esc(t('Прибрати зі списку'))}">✕</button></div>`).join('') || `<div class="empty" style="margin:20px">${esc(t('Список порожній'))}</div>`}</div>`;
+  p.querySelectorAll('[data-r]').forEach(el => el.onclick = e => { if (e.target.dataset.rm) return; selectRepo(el.dataset.r); });
+  p.querySelectorAll('[data-rm]').forEach(el => el.onclick = async e => { e.stopPropagation(); await api('removeRepo', { repo: el.dataset.rm }); S.app = await api('state'); if (S.repo === el.dataset.rm) { S.repo = S.app.repos[0] || null; S.st = null; } renderAll(); refresh(true); closePops(); });
+  $('#rAdd').onclick = addRepo; $('#rClone').onclick = cloneRepo; $('#rNew').onclick = newRepo;
+}
+async function selectRepo(path) {
+  closePops(); S.repo = path; S.st = null; S.sel = null; S.commit = null; S.stJson = ''; S.tab = 'changes';
+  localStorage.setItem('lastRepo', path); renderAll(); await refresh(true);
+}
+async function afterRepoAdded(path) { S.app = await api('state'); await selectRepo(path); }
+async function addRepo() {
+  closePops();
+  const v = await modal(t('Додати локальний репозиторій'), [{ id: 'path', label: t('Папка з git-репозиторієм'), browse: true }], t('Додати')); if (!v || !v.path) return;
+  try { const r = await api('addRepo', { repo: v.path }); await afterRepoAdded(r.path); } catch (e) { toast(e.message, true); }
+}
+async function cloneRepo() {
+  closePops();
+  const v = await modal(t('Клонувати репозиторій'), [{ id: 'url', label: t('URL або owner/repo'), placeholder: 'https://github.com/owner/repo' }, { id: 'parent', label: t('Куди клонувати'), value: S.app.docs + '\\GitHub', browse: true }], t('Клонувати')); if (!v || !v.url) return;
+  toast(t('Клонування…')); try { const r = await api('clone', v); await afterRepoAdded(r.path); toast(t('Готово')); } catch (e) { toast(e.message, true); }
+}
+async function newRepo() {
+  closePops();
+  const v = await modal(t('Створити новий репозиторій'), [{ id: 'path', label: t('Папка (буде створена, якщо не існує)'), value: S.app.docs + '\\GitHub\\', browse: true }], t('Створити')); if (!v || !v.path) return;
+  try { const r = await api('init', { repo: v.path }); await afterRepoAdded(r.path); } catch (e) { toast(e.message, true); }
+}
+
+async function renderBranchPop(p) {
+  p.innerHTML = `<div class="pad"><input type="text" id="bf" placeholder="${esc(t('Фільтр гілок…'))}"><button id="bNew">${esc(t('+ Нова'))}</button></div><div class="list" id="bl"><div class="empty" style="margin:20px">…</div></div>`;
+  $('#bNew').onclick = newBranch;
+  try { S.branches = await R('branches'); } catch (e) { toast(e.message, true); return; }
+  const draw = () => {
+    const f = ($('#bf').value || '').toLowerCase(), cur = S.st && S.st.branch;
+    const loc = S.branches.local.filter(b => b.name.toLowerCase().includes(f)), rem = S.branches.remote.filter(b => b.name.toLowerCase().includes(f));
+    $('#bl').innerHTML = `<div class="sect">${esc(t('Локальні'))}</div>` + loc.map(b => `<div class="row ${b.current ? 'sel' : ''}" data-sw="${esc(b.name)}"><span class="nm">${b.current ? '✓ ' : ''}${esc(b.name)}</span>${b.current ? '' : `<button class="x" data-mg="${esc(b.name)}" title="${esc(t('Влити в поточну'))}">merge</button><button class="x" data-del="${esc(b.name)}" title="${esc(t('Видалити'))}">✕</button>`}</div>`).join('')
+      + (rem.length ? `<div class="sect">${esc(t('На сервері'))}</div>` + rem.map(b => `<div class="row" data-sw="${esc(b.name.replace(/^[^/]+\//, ''))}"><span class="nm">${esc(b.name)}</span></div>`).join('') : '');
+    $('#bl').querySelectorAll('[data-sw]').forEach(el => el.onclick = e => { if (e.target.dataset.mg || e.target.dataset.del) return; closePops(); if (el.dataset.sw !== cur) run('switch', () => R('switch', { name: el.dataset.sw }), t('Перемкнено на {name}', { name: el.dataset.sw })); });
+    $('#bl').querySelectorAll('[data-mg]').forEach(el => el.onclick = e => { e.stopPropagation(); closePops(); if (confirm(t('Влити "{name}" у "{cur}"?', { name: el.dataset.mg, cur }))) run('merge', () => R('merge', { name: el.dataset.mg }), t('Злито')); });
+    $('#bl').querySelectorAll('[data-del]').forEach(el => el.onclick = e => { e.stopPropagation(); closePops(); if (confirm(t('Видалити гілку "{name}"?', { name: el.dataset.del }))) run('delete', async () => { try { return await R('deleteBranch', { name: el.dataset.del }); } catch (er) { if (confirm(er.message + '\n\n' + t('Видалити примусово?'))) return R('deleteBranch', { name: el.dataset.del, force: true }); throw er; } }, t('Гілку видалено')); });
+  };
+  $('#bf').oninput = draw; draw(); $('#bf').focus();
+}
+async function newBranch() {
+  closePops();
+  const v = await modal(t('Нова гілка'), [{ id: 'name', label: t('Назва (від поточної: {cur})', { cur: S.st ? S.st.branch : '' }), placeholder: 'feature/my-change' }], t('Створити')); if (!v || !v.name) return;
+  run('branch', () => R('createBranch', { name: v.name.replace(/\s+/g, '-') }), t('Гілку створено'));
+}
+
+function renderMenuPop(p) {
+  const s = S.st || {}, a = S.app, items = [
+    [t('Відкрити на GitHub'), () => s.webUrl ? api('open', { what: 'url', url: s.webUrl }) : toast(t('Немає remote'), true), !!s.webUrl],
+    [t('Створити Pull Request'), () => api('open', { what: 'url', url: `${s.webUrl}/compare/${encodeURIComponent(s.branch).replace(/%2F/g, '/')}?expand=1` }), !!s.webUrl && !!s.upstream],
+    [t('Відкрити у Провіднику'), () => R('open', { what: 'explorer' }), true],
+    [t('Відкрити в VS Code'), () => R('open', { what: 'code' }), true],
+    [t('Відкрити термінал'), () => R('open', { what: 'terminal' }), true],
+    ['—'],
+    [t('Stash (відкласти зміни)'), () => run('stash', () => R('stash'), r => r.out.trim() || t('Готово')), true],
+    [t('Stash pop (повернути)'), () => run('stash', () => R('stashPop'), t('Повернуто')), true],
+    [t('Скасувати останній коміт (залишити зміни)'), () => { if (confirm(t('Скасувати останній коміт? Зміни залишаться у файлах.'))) run('undo', () => R('undoCommit'), t('Коміт скасовано')); }, !!s.hasCommits],
+    [t('Скасувати злиття (merge --abort)'), () => run('merge', () => R('abortMerge'), t('Скасовано')), !!s.merging],
+    ['—'],
+    [t('Додати remote вручну…'), addRemote, !s.remote],
+    [t('Мої дані для комітів…'), setIdentity, true],
+    [a.gh ? (a.ghAuthed ? t('GitHub: @{user} ✓ — вийти', { user: a.ghUser }) : t('Увійти в GitHub')) : t('Встановити GitHub CLI (gh)'), () => a.gh ? ghToggle() : installGh(), true],
+  ];
+  p.innerHTML = '<div class="list">' + items.map((it, i) => it[0] === '—' ? '<hr style="border:0;border-top:1px solid var(--line);margin:4px 0">' : `<div class="row" data-i="${i}" style="${it[2] ? '' : 'opacity:.4;pointer-events:none'}">${esc(it[0])}</div>`).join('') + '</div>';
+  p.querySelectorAll('[data-i]').forEach(el => el.onclick = () => { closePops(); Promise.resolve(items[el.dataset.i][1]()).catch(e => toast(e.message, true)); });
+}
+async function addRemote() {
+  const v = await modal(t('Додати remote "origin"'), [{ id: 'url', label: t('URL репозиторію на GitHub'), placeholder: 'https://github.com/owner/repo.git' }], t('Додати')); if (!v || !v.url) return;
+  run('remote', () => R('addRemote', { url: v.url }), t('Додано'));
+}
+
+async function doSync() {
+  const si = syncInfo();
+  if (si.act === 'publish') {
+    if (!S.app.gh) { if (confirm(t('Для створення репозиторію на GitHub потрібен GitHub CLI (gh). Встановити? Якщо репозиторій уже створено на github.com — скасуйте і скористайтесь меню ⋯ → "Додати remote вручну".'))) installGh(); return; }
+    if (!S.app.ghAuthed) { ghLogin(); return; }
+    if (!S.st.hasCommits) { toast(t('Спочатку зробіть хоча б один коміт'), true); return; }
+    const v = await modal(t('Опублікувати на GitHub'), [{ id: 'name', label: t('Назва репозиторію'), value: base(S.repo) }, { id: 'private', type: 'checkbox', label: t('Приватний репозиторій'), value: true }], t('Опублікувати')); if (!v || !v.name) return;
+    return run('publish', () => R('publish', v), t('Опубліковано!'));
+  }
+  run(si.act, () => R(si.act), r => (r.out || '').trim() || t('Готово'));
+}
+
+function renderSide() {
+  const m = $('#main');
+  if (!S.repo) return renderWelcome();
+  const s = S.st, n = s ? s.files.length : 0;
+  if (!m.querySelector('.side')) {
+    m.innerHTML = `<div class="side"><div class="tabs"><div class="tab" id="tChanges"></div><div class="tab" id="tHistory"></div></div><div id="sideBody" style="display:flex;flex-direction:column;flex:1;min-height:0"></div></div>
+      <div class="content"><div id="meta"></div><div id="diff"><div class="empty">${esc(t('Оберіть файл'))}</div></div></div>`;
+    $('#tChanges').onclick = () => { S.tab = 'changes'; S.commit = null; renderSide(); showFileDiff(); };
+    $('#tHistory').onclick = () => { S.tab = 'history'; renderSide(); loadLog(); };
+  }
+  $('#tChanges').innerHTML = `${esc(t('Зміни'))} ${n ? `<span class="pill">${n}</span>` : ''}`;
+  $('#tHistory').textContent = t('Історія');
+  $('#tChanges').className = 'tab' + (S.tab === 'changes' ? ' on' : '');
+  $('#tHistory').className = 'tab' + (S.tab === 'history' ? ' on' : '');
+  $('#meta').style.display = S.tab === 'history' ? 'block' : 'none';
+  S.tab === 'changes' ? renderChanges() : renderHistory();
+}
+
+const letter = f => (f.x === 'U' || f.y === 'U' || (f.x === 'A' && f.y === 'A') || (f.x === 'D' && f.y === 'D')) ? 'U' : f.x === '?' ? 'A' : (f.x !== ' ' ? f.x : f.y);
+const staged = f => f.x !== ' ' && f.x !== '?';
+function renderChanges() {
+  const s = S.st, body = $('#sideBody'); if (!s) return;
+  const files = s.files, nStaged = files.filter(staged).length;
+  const prev = body.querySelector('#sum') ? { sum: body.querySelector('#sum').value, desc: body.querySelector('#desc').value } : { sum: '', desc: '' };
+  const hadFocus = document.activeElement && (document.activeElement.id === 'sum' || document.activeElement.id === 'desc') ? document.activeElement.id : null;
+  body.innerHTML = `<div class="listhead"><input type="checkbox" id="all" ${files.length && nStaged === files.length ? 'checked' : ''} ${files.length ? '' : 'disabled'}> <span>${esc(t('{n} змінених файлів', { n: files.length }))}${s.merging ? ` · <b style="color:var(--yellow)">${esc(t('йде злиття'))}</b>` : ''}</span></div>
+    <div class="list">${files.map(f => { const l = letter(f), partial = staged(f) && f.y !== ' ' && f.y !== undefined && f.x !== '?'; return `<div class="row ${f.path === S.sel ? 'sel' : ''}" data-p="${esc(f.path)}"><input type="checkbox" data-c="${esc(f.path)}" ${staged(f) ? 'checked' : ''} ${partial ? 'class=part' : ''}><span class="nm" title="${esc(f.path)}">${esc(f.path)}</span><button class="x" data-d="${esc(f.path)}" title="${esc(t('Скасувати зміни'))}">↶</button><span class="badge ${l}">${l === 'A' && f.x === '?' ? 'N' : l}</span></div>`; }).join('') || `<div class="empty" style="margin:30px 10px">${esc(t('Немає змін ✨'))}</div>`}</div>
+    <div class="commitbox"><input type="text" id="sum" placeholder="${esc(t('Короткий опис (summary)'))}" value="${esc(prev.sum)}"><textarea id="desc" placeholder="${esc(t("Опис (необов'язково)"))}">${esc(prev.desc)}</textarea>
+      <button class="primary" id="doCommit" ${nStaged ? '' : 'disabled'}>${esc(t('Коміт у'))} <b>${esc(s.branch)}</b> (${nStaged})</button>${s.lastSubject ? `<small style="color:var(--mute)">${esc(t('Останній: {s}', { s: s.lastSubject }))}</small>` : ''}</div>`;
+  if (hadFocus) { const el = body.querySelector('#' + hadFocus); el.focus(); el.setSelectionRange && el.setSelectionRange(el.value.length, el.value.length); }
+  const byPath = p => files.find(f => f.path === p);
+  body.querySelector('#all').onchange = e => run('stage', () => R(e.target.checked ? 'stageAll' : 'unstageAll'));
+  body.querySelectorAll('[data-p]').forEach(el => el.onclick = e => { if (e.target.dataset.c !== undefined || e.target.dataset.d !== undefined) return; S.sel = el.dataset.p; renderChanges(); showFileDiff(); });
+  body.querySelectorAll('[data-c]').forEach(el => el.onchange = () => run('stage', () => R(el.checked ? 'stage' : 'unstage', { paths: [el.dataset.c] })));
+  body.querySelectorAll('[data-d]').forEach(el => el.onclick = () => { const f = byPath(el.dataset.d); if (confirm(t('Скасувати зміни у "{p}"? Це незворотньо.', { p: f.path }))) run('discard', () => R('discard', { files: [{ path: f.path, untracked: f.x === '?' }] }), t('Зміни скасовано')); });
+  $('#doCommit').onclick = async () => {
+    const summary = $('#sum').value.trim(); if (!summary) { toast(t('Напишіть короткий опис коміту'), true); $('#sum').focus(); return; }
+    const r = await run('commit', () => R('commit', { summary, description: $('#desc').value }), t('Коміт створено ✓'));
+    if (r) { $('#sum').value = ''; $('#desc').value = ''; }
+  };
+  $('#sum').onkeydown = e => { if (e.key === 'Enter') $('#doCommit').click(); };
+}
+
+async function showFileDiff() {
+  const d = $('#diff'); if (!d || S.tab !== 'changes') return;
+  const f = S.st && S.st.files.find(x => x.path === S.sel);
+  if (!f) { d.innerHTML = `<div class="empty">${esc(S.st && S.st.files.length ? t('Оберіть файл') : t("Змін немає. Редагуйте файли у своєму редакторі — вони з'являться тут автоматично."))}</div>`; return; }
+  try { const r = await R('diff', { path: f.path, untracked: f.x === '?' }); if (S.sel === f.path) d.innerHTML = renderDiff(r.diff); } catch (e) { d.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+function renderDiff(text) {
+  if (!text.trim()) return `<div class="empty">${esc(t('Немає відображуваних змін (порожній або бінарний файл)'))}</div>`;
+  let o = 0, n = 0, html = '<table class="d">';
+  for (const l of text.split('\n')) {
+    if (l.startsWith('@@')) { const m = /@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(l); if (m) { o = +m[1]; n = +m[2]; } html += `<tr class="hunk"><td class="ln"></td><td class="ln"></td><td>${esc(l)}</td></tr>`; }
+    else if (/^(diff |index |--- |\+\+\+ |new file|deleted file|similarity|rename|old mode|new mode|Binary)/.test(l) && o === 0 && n === 0) html += `<tr class="meta"><td class="ln"></td><td class="ln"></td><td>${esc(l)}</td></tr>`;
+    else if (l.startsWith('+')) html += `<tr class="add"><td class="ln"></td><td class="ln">${n++}</td><td>${esc(l)}</td></tr>`;
+    else if (l.startsWith('-')) html += `<tr class="del"><td class="ln">${o++}</td><td class="ln"></td><td>${esc(l)}</td></tr>`;
+    else if (l.startsWith('\\')) html += `<tr class="meta"><td class="ln"></td><td class="ln"></td><td>${esc(l)}</td></tr>`;
+    else if (o || n) html += `<tr><td class="ln">${o++}</td><td class="ln">${n++}</td><td>${esc(l)}</td></tr>`;
+  }
+  return html + '</table>';
+}
+
+/* ---------- history ---------- */
+async function loadLog() {
+  try { const r = await R('log'); S.log = r.commits; S.unpushed = r.unpushed; renderHistory(); if (!S.commit && S.log.length) openCommit(S.log[0].sha); } catch (e) { toast(e.message, true); }
+}
+const ago = iso => { const s = (Date.now() - new Date(iso)) / 1000; if (s < 60) return t('щойно'); if (s < 3600) return t('{n} хв', { n: Math.floor(s / 60) }); if (s < 86400) return t('{n} год', { n: Math.floor(s / 3600) }); if (s < 2592000) return t('{n} дн', { n: Math.floor(s / 86400) }); return new Date(iso).toLocaleDateString(); };
+function renderHistory() {
+  const body = $('#sideBody'); if (!body) return;
+  body.innerHTML = `<div class="list">${S.log.map(c => `<div class="row ${c.sha === S.commit ? 'sel' : ''}" data-s="${c.sha}" style="flex-direction:column;align-items:stretch;gap:0"><div class="nm" title="${esc(c.subject)}">${esc(c.subject)}</div><small style="color:var(--mute)">${esc(c.author)} · ${ago(c.date)} · ${c.short} ${S.unpushed.includes(c.sha) ? `<span class="up">↑ ${esc(t('не відправлено'))}</span>` : ''}</small></div>`).join('') || `<div class="empty" style="margin:30px 10px">${esc(t('Комітів ще немає'))}</div>`}</div>`;
+  body.querySelectorAll('[data-s]').forEach(el => el.onclick = () => openCommit(el.dataset.s));
+}
+async function openCommit(sha) {
+  S.commit = sha; renderHistory();
+  try {
+    const r = await R('show', { sha });
+    $('#meta').innerHTML = `<div><b>${esc(r.message.split('\n')[0])}</b></div><div style="color:var(--mute);font-size:12px">${esc(r.author)} &lt;${esc(r.email)}&gt; · ${new Date(r.date).toLocaleString()} · ${r.sha.slice(0, 7)}</div>${r.message.includes('\n') ? `<div class="msg">${esc(r.message.split('\n').slice(1).join('\n').trim())}</div>` : ''}<div id="chips" style="margin-top:8px">${r.files.map((f, i) => `<span class="chip" data-f="${esc(f.path)}"><span class="${f.status}">${f.status}</span> ${esc(f.path)}</span>`).join('')}</div>`;
+    $('#meta').querySelectorAll('.chip').forEach(c => c.onclick = () => showCommitFile(sha, c.dataset.f, c));
+    const first = $('#meta .chip'); first ? showCommitFile(sha, first.dataset.f, first) : $('#diff').innerHTML = `<div class="empty">${esc(t('Порожній коміт'))}</div>`;
+  } catch (e) { toast(e.message, true); }
+}
+async function showCommitFile(sha, path, chip) {
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('sel')); chip.classList.add('sel');
+  try { const r = await R('showDiff', { sha, path }); $('#diff').innerHTML = renderDiff(r.diff); } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- welcome ---------- */
+function renderWelcome() {
+  $('#main').innerHTML = `<div class="welcome"><div class="logo">⎇</div><h1>GitHub Helper</h1><p style="color:var(--mute)">${esc(t('Робіть коміти, гілки та синхронізацію з GitHub без командного рядка.'))}</p>
+    <div class="btns"><button class="primary" id="wClone">${esc(t('⬇ Клонувати репозиторій з GitHub'))}</button><button id="wAdd">${esc(t('📁 Додати наявну папку з проєктом'))}</button><button id="wNew">${esc(t('✚ Створити новий репозиторій'))}</button></div></div>`;
+  $('#wClone').onclick = cloneRepo; $('#wAdd').onclick = addRepo; $('#wNew').onclick = newRepo;
+}
+
+boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">' + esc(t('Не вдалося підключитись до локального сервера: ')) + esc(e.message) + '</p>'; });
+</script>
+</body>
+</html>
