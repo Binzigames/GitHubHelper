@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GitHub Helper</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%234c8dff'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round'%3E%3Ccircle cx='22' cy='18' r='5'/%3E%3Ccircle cx='22' cy='46' r='5'/%3E%3Ccircle cx='44' cy='26' r='5'/%3E%3Cpath d='M22 23v18M44 31c0 8-8 8-22 10'/%3E%3C/g%3E%3C/svg%3E">
 <style>
 :root{--bg:#0b0f14;--panel:#12171e;--panel2:#1a212b;--line:#262e3a;--text:#e8eef5;--mute:#8693a3;--accent:#4c8dff;--accent2:#8b5cf6;--green:#3fb950;--red:#ff6b64;--yellow:#e3b341;--addbg:rgba(46,160,67,.16);--delbg:rgba(248,81,73,.15);--shadow:0 12px 40px rgba(0,0,0,.45);--r:10px}
 @media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f4f6fa;--panel:#fff;--panel2:#eef1f6;--line:#dde3ec;--text:#1b2330;--mute:#5f6c7d;--accent:#2563eb;--accent2:#7c3aed;--green:#1a7f37;--red:#d1242f;--yellow:#9a6700;--addbg:#e3f8e9;--delbg:#ffe8e6;--shadow:0 12px 40px rgba(20,30,50,.18)}}
@@ -93,11 +94,22 @@ tr.meta td{color:var(--mute)}
 .welcome .logo{width:76px;height:76px;margin:0 auto;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:38px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 14px 40px rgba(76,141,255,.4)}
 .welcome .btns{display:flex;flex-direction:column;gap:10px;margin-top:24px}
 .welcome button{padding:12px;border-radius:10px}
+.welcome .wfeat{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-direction:column;gap:6px;text-align:left;display:inline-flex}
+.welcome .wlist-h{margin:22px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);text-align:left}
+.welcome .wlist{max-height:210px;overflow:auto;text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.welcome .wlist .row{cursor:pointer}
+.welcome .wlist .row button{padding:2px 6px}
 .pill{background:var(--accent);color:#fff;border-radius:10px;padding:0 8px;font-size:11px;font-weight:600}
 .up{color:var(--accent);font-size:11px}
 .code{font:700 30px "Cascadia Mono",Consolas,monospace;letter-spacing:.18em;text-align:center;padding:16px;background:var(--bg);border:1px dashed var(--accent);border-radius:12px;user-select:all;margin:12px 0}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
+#splash{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;transition:opacity .35s}
+#splash.hide{opacity:0;pointer-events:none}
+#splash .logo{width:84px;height:84px;margin-bottom:8px;filter:drop-shadow(0 8px 24px rgba(76,141,255,.35))}
+#splash h1{margin:0;font-size:28px;letter-spacing:.01em}
+#splash .ver{color:var(--mute);font:600 14px "Cascadia Mono",Consolas,monospace}
+#splash .msg{color:var(--mute);margin-top:14px;font-size:14px;min-height:20px}
 </style>
 </head>
 <body>
@@ -108,9 +120,15 @@ tr.meta td{color:var(--mute)}
 <div class="pop" id="popMenu" style="right:8px;width:260px"></div>
 <div class="main" id="main"></div>
 <div id="toast"></div>
+<div id="splash">
+  <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4c8dff"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#sg)"/><g fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"><circle cx="22" cy="18" r="5"/><circle cx="22" cy="46" r="5"/><circle cx="44" cy="26" r="5"/><path d="M22 23v18M44 31c0 8-8 8-22 10"/></g></svg>
+  <h1>GitHub Helper</h1>
+  <div class="ver">v__VERSION__</div>
+  <div class="msg"><span class="spin"></span><span id="splashMsg"></span></div>
+</div>
 
 <script>
-const TOKEN = "__TOKEN__";
+const TOKEN = "__TOKEN__", VERSION = "__VERSION__";
 const S = { app: null, repo: null, st: null, tab: 'changes', sel: null, commit: null, log: [], unpushed: [], branches: null, busy: '', stJson: '' };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -150,7 +168,10 @@ const I18N = { en: {
   'Видалити гілку "{name}"?': 'Delete branch "{name}"?', 'Видалити примусово?': 'Force delete?', 'Гілку видалено': 'Branch deleted',
   'Нова гілка': 'New branch', 'Назва (від поточної: {cur})': 'Name (from current: {cur})', 'Гілку створено': 'Branch created',
   'Відкрити на GitHub': 'Open on GitHub', 'Вигляд': 'Appearance', 'Тема': 'Theme', 'Системна': 'System', 'Темна': 'Dark', 'Світла': 'Light', 'Акцентний колір': 'Accent color', 'Свій колір': 'Custom color', 'Розмір тексту': 'Text size', 'Розмір коду (diff)': 'Code size (diff)', 'Щільність списків': 'List density', 'Компактно': 'Compact', 'Звичайно': 'Normal', 'Просторо': 'Roomy', 'Скинути': 'Reset', 'Репозиторій на GitHub': 'GitHub repository', 'Відкрити': 'Open', 'Немає remote': 'No remote', 'Створити Pull Request': 'Create Pull Request',
-  'Відкрити у Провіднику': 'Open in Explorer', 'Відкрити в VS Code': 'Open in VS Code', 'Відкрити термінал': 'Open terminal',
+  'Перевірка оновлень…': 'Checking for updates…', 'Знайдено оновлення v{v}. Встановлення…': 'Update v{v} found. Installing…', 'Перезапуск…': 'Restarting…', 'Запуск…': 'Starting…', 'Не вдалося оновитися: ': 'Update failed: ',
+  'Ваші репозиторії': 'Your repositories', 'Або додайте новий': 'Or add a new one', 'востаннє': 'last opened', 'Вітальний екран': 'Welcome screen',
+  '📝 Перегляд змін і коміти в кілька кліків': '📝 Review changes and commit in a few clicks', '🌿 Гілки, історія та злиття': '🌿 Branches, history and merging', '☁️ Синхронізація і публікація на GitHub': '☁️ Sync and publish to GitHub',
+  'Відкрити у Провіднику': 'Open in Explorer', 'Відкрити у файловому менеджері': 'Open in file manager', 'Відкрити в VS Code': 'Open in VS Code', 'Відкрити термінал': 'Open terminal',
   'Stash (відкласти зміни)': 'Stash (set changes aside)', 'Stash pop (повернути)': 'Stash pop (restore)', 'Повернуто': 'Restored',
   'Скасувати останній коміт (залишити зміни)': 'Undo last commit (keep changes)',
   'Скасувати останній коміт? Зміни залишаться у файлах.': 'Undo the last commit? Changes will stay in your files.',
@@ -292,10 +313,8 @@ function modal(title, fields, okLabel = 'OK') {
 async function boot() {
   document.documentElement.lang = LANG;
   S.app = await api('state');
-  const last = localStorage.getItem('lastRepo');
-  if (last && S.app.repos.includes(last)) S.repo = last; else if (S.app.repos.length) S.repo = S.app.repos[0];
+  // Always land on the welcome screen; the user picks a repository from there.
   renderBanner(); renderAll();
-  if (S.repo) await refresh(true);
 }
 
 async function installDep(what) {
@@ -348,12 +367,17 @@ async function ghLogout() {
 const ghToggle = () => S.app.ghAuthed ? ghLogout() : ghLogin();
 
 /* ---------- refresh ---------- */
+let refreshing = false;
 async function refresh(force) {
   if (!S.repo) return;
+  if (refreshing && !force) return;
+  refreshing = true;
   try {
     const st = await R('status');
     const j = JSON.stringify(st);
-    const changed = j !== S.stJson; S.stJson = j; S.st = st;
+    const changed = j !== S.stJson; S.stJson = j;
+    const headMoved = S.st && S.st.head !== st.head; S.st = st;
+    if (headMoved && S.tab === 'history' && !force) loadLog();
     if (S.sel && !st.files.find(f => f.path === S.sel)) S.sel = null;
     if (changed || force) {
       renderTop(); renderSide();
@@ -361,15 +385,18 @@ async function refresh(force) {
     }
     if (force && S.tab === 'history') loadLog();
   } catch (e) { if (force) toast(e.message, true); }
+  finally { refreshing = false; }
 }
-setInterval(() => { if (document.hasFocus() && !S.busy && S.repo) refresh(false); }, 3000);
+// Poll the working tree often (every 2 s while the window is visible); status carries file mtimes and HEAD,
+// so edits to an already-modified file and commits made outside the app are noticed too.
+setInterval(() => { if (!document.hidden && !S.busy && S.repo) refresh(false); }, 2000);
 window.addEventListener('focus', () => refresh(false));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(false); });
 // Heartbeat: the server shuts itself down when the window is closed and pings stop.
 setInterval(() => { api('state').catch(() => { }); }, 3000);
 // Tell the server right away when the window closes (it waits ~2 s in case this is just a reload).
 window.addEventListener('pagehide', () => { try { fetch('/api/bye', { method: 'POST', keepalive: true, headers: { 'X-Token': TOKEN, 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) { } });
 // Periodic refresh of the working tree, plus a background fetch every 2 minutes (updates ahead/behind).
-setInterval(() => { if (!document.hidden && !S.busy) refresh(false); }, 10000);
 setInterval(async () => { if (S.repo && S.st && S.st.remote && !S.busy) { try { await R('fetch'); await refresh(false); } catch (e) { } } }, 120000);
 
 /* ---------- render ---------- */
@@ -415,10 +442,10 @@ function togglePop(id, fn) {
 }
 
 function renderRepoPop(p) {
-  p.innerHTML = `<div class="pad"><button id="rAdd">${esc(t('Додати'))}</button><button id="rClone">${esc(t('Клонувати'))}</button><button id="rNew">${esc(t('Створити'))}</button></div><div class="list">${S.app.repos.map(r => `<div class="row ${r === S.repo ? 'sel' : ''}" data-r="${esc(r)}"><span class="nm" title="${esc(r)}">${esc(base(r))}</span><button class="x" data-rm="${esc(r)}" title="${esc(t('Прибрати зі списку'))}">✕</button></div>`).join('') || `<div class="empty" style="margin:20px">${esc(t('Список порожній'))}</div>`}</div>`;
+  p.innerHTML = `<div class="pad"><button id="rHome" title="${esc(t('Вітальний екран'))}">⌂</button><button id="rAdd">${esc(t('Додати'))}</button><button id="rClone">${esc(t('Клонувати'))}</button><button id="rNew">${esc(t('Створити'))}</button></div><div class="list">${S.app.repos.map(r => `<div class="row ${r === S.repo ? 'sel' : ''}" data-r="${esc(r)}"><span class="nm" title="${esc(r)}">${esc(base(r))}</span><button class="x" data-rm="${esc(r)}" title="${esc(t('Прибрати зі списку'))}">✕</button></div>`).join('') || `<div class="empty" style="margin:20px">${esc(t('Список порожній'))}</div>`}</div>`;
   p.querySelectorAll('[data-r]').forEach(el => el.onclick = e => { if (e.target.dataset.rm) return; selectRepo(el.dataset.r); });
   p.querySelectorAll('[data-rm]').forEach(el => el.onclick = async e => { e.stopPropagation(); await api('removeRepo', { repo: el.dataset.rm }); S.app = await api('state'); if (S.repo === el.dataset.rm) { S.repo = S.app.repos[0] || null; S.st = null; } renderAll(); refresh(true); closePops(); });
-  $('#rAdd').onclick = addRepo; $('#rClone').onclick = cloneRepo; $('#rNew').onclick = newRepo;
+  $('#rHome').onclick = goHome; $('#rAdd').onclick = addRepo; $('#rClone').onclick = cloneRepo; $('#rNew').onclick = newRepo;
 }
 async function selectRepo(path) {
   closePops(); S.repo = path; S.st = null; S.sel = null; S.commit = null; S.stJson = ''; S.tab = 'changes';
@@ -432,12 +459,12 @@ async function addRepo() {
 }
 async function cloneRepo() {
   closePops();
-  const v = await modal(t('Клонувати репозиторій'), [{ id: 'url', label: t('URL або owner/repo'), placeholder: 'https://github.com/owner/repo' }, { id: 'parent', label: t('Куди клонувати'), value: S.app.docs + '\\GitHub', browse: true }], t('Клонувати')); if (!v || !v.url) return;
+  const v = await modal(t('Клонувати репозиторій'), [{ id: 'url', label: t('URL або owner/repo'), placeholder: 'https://github.com/owner/repo' }, { id: 'parent', label: t('Куди клонувати'), value: S.app.docs + (S.app.sep || '\\') + 'GitHub', browse: true }], t('Клонувати')); if (!v || !v.url) return;
   toast(t('Клонування…')); try { const r = await api('clone', v); await afterRepoAdded(r.path); toast(t('Готово')); } catch (e) { toast(e.message, true); }
 }
 async function newRepo() {
   closePops();
-  const v = await modal(t('Створити новий репозиторій'), [{ id: 'path', label: t('Папка (буде створена, якщо не існує)'), value: S.app.docs + '\\GitHub\\', browse: true }], t('Створити')); if (!v || !v.path) return;
+  const v = await modal(t('Створити новий репозиторій'), [{ id: 'path', label: t('Папка (буде створена, якщо не існує)'), value: S.app.docs + (S.app.sep || '\\') + 'GitHub' + (S.app.sep || '\\'), browse: true }], t('Створити')); if (!v || !v.path) return;
   try { const r = await api('init', { repo: v.path }); await afterRepoAdded(r.path); } catch (e) { toast(e.message, true); }
 }
 
@@ -466,7 +493,7 @@ function renderMenuPop(p) {
   const s = S.st || {}, a = S.app, items = [
     [t('Відкрити на GitHub'), () => s.webUrl ? api('open', { what: 'url', url: s.webUrl }) : toast(t('Немає remote'), true), !!s.webUrl],
     [t('Створити Pull Request'), () => api('open', { what: 'url', url: `${s.webUrl}/compare/${encodeURIComponent(s.branch).replace(/%2F/g, '/')}?expand=1` }), !!s.webUrl && !!s.upstream],
-    [t('Відкрити у Провіднику'), () => R('open', { what: 'explorer' }), true],
+    [a && a.os === 'linux' ? t('Відкрити у файловому менеджері') : t('Відкрити у Провіднику'), () => R('open', { what: 'explorer' }), true],
     [t('Відкрити в VS Code'), () => R('open', { what: 'code' }), true],
     [t('Відкрити термінал'), () => R('open', { what: 'terminal' }), true],
     ['—'],
@@ -589,12 +616,51 @@ async function showCommitFile(sha, path, chip) {
 
 /* ---------- welcome ---------- */
 function renderWelcome() {
-  $('#main').innerHTML = `<div class="welcome"><div class="logo">⎇</div><h1>GitHub Helper</h1><p style="color:var(--mute)">${esc(t('Робіть коміти, гілки та синхронізацію з GitHub без командного рядка.'))}</p>
-    <div class="btns"><button class="primary" id="wClone">${esc(t('⬇ Клонувати репозиторій з GitHub'))}</button><button id="wAdd">${esc(t('📁 Додати наявну папку з проєктом'))}</button><button id="wNew">${esc(t('✚ Створити новий репозиторій'))}</button></div></div>`;
+  const repos = (S.app && S.app.repos) || [], last = localStorage.getItem('lastRepo');
+  const list = repos.length ? `<div class="wlist-h">${esc(t('Ваші репозиторії'))}</div><div class="wlist">${repos.map(r => `<div class="row" data-r="${esc(r)}" title="${esc(r)}"><span class="nm">${esc(base(r))}${r === last ? ` <small style="color:var(--mute)">· ${esc(t('востаннє'))}</small>` : ''}</span><button class="x" data-rm="${esc(r)}" title="${esc(t('Прибрати зі списку'))}">✕</button></div>`).join('')}</div><div class="wlist-h">${esc(t('Або додайте новий'))}</div>` : '';
+  $('#main').innerHTML = `<div class="welcome"><div class="logo">⎇</div><h1>GitHub Helper</h1><div style="color:var(--mute);font:600 13px 'Cascadia Mono',Consolas,monospace">v${esc(VERSION)}</div>
+    <p style="color:var(--mute)">${esc(t('Робіть коміти, гілки та синхронізацію з GitHub без командного рядка.'))}</p>
+    <ul class="wfeat"><li>${esc(t('📝 Перегляд змін і коміти в кілька кліків'))}</li><li>${esc(t('🌿 Гілки, історія та злиття'))}</li><li>${esc(t('☁️ Синхронізація і публікація на GitHub'))}</li></ul>
+    ${list}<div class="btns"><button class="${repos.length ? '' : 'primary'}" id="wClone">${esc(t('⬇ Клонувати репозиторій з GitHub'))}</button><button id="wAdd">${esc(t('📁 Додати наявну папку з проєктом'))}</button><button id="wNew">${esc(t('✚ Створити новий репозиторій'))}</button></div></div>`;
   $('#wClone').onclick = cloneRepo; $('#wAdd').onclick = addRepo; $('#wNew').onclick = newRepo;
+  $('#main').querySelectorAll('.wlist [data-r]').forEach(el => el.onclick = e => { if (e.target.dataset.rm) return; selectRepo(el.dataset.r); });
+  $('#main').querySelectorAll('.wlist [data-rm]').forEach(el => el.onclick = async e => { e.stopPropagation(); await api('removeRepo', { repo: el.dataset.rm }); S.app = await api('state'); renderWelcome(); });
 }
+function goHome() { closePops(); S.repo = null; S.st = null; S.sel = null; S.commit = null; S.stJson = ''; renderAll(); }
 
-boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">' + esc(t('Не вдалося підключитись до локального сервера: ')) + esc(e.message) + '</p>'; });
+/* ---------- startup: splash + auto-update ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const splashMsg = m => { const el = $('#splashMsg'); if (el) el.textContent = m; };
+// After an update the server restarts on the same port with a new token: the old token is rejected (403)
+// by the new process, which tells us it is up and the page must be reloaded to pick up the new token.
+async function waitForRestart() {
+  await sleep(1500);
+  for (let i = 0; i < 80; i++) {
+    try { await api('state'); }
+    catch (e) { if (/bad token/i.test(e.message)) return true; }
+    await sleep(500);
+  }
+  return false;
+}
+async function startup() {
+  const t0 = Date.now();
+  splashMsg(t('Перевірка оновлень…'));
+  let info = null;
+  try { info = await api('updateCheck'); } catch (e) { }
+  if (info && info.available) {
+    splashMsg(t('Знайдено оновлення v{v}. Встановлення…', { v: info.latest }));
+    try {
+      await api('updateInstall');
+      splashMsg(t('Перезапуск…'));
+      if (await waitForRestart()) { location.reload(); return; }
+    } catch (e) { setTimeout(() => toast(t('Не вдалося оновитися: ') + e.message, true), 600); }
+  }
+  splashMsg(t('Запуск…'));
+  await boot();
+  await sleep(Math.max(0, 1400 - (Date.now() - t0)));   // show the title screen long enough to read the version
+  const sp = $('#splash'); sp.classList.add('hide'); setTimeout(() => sp.remove(), 500);
+}
+startup().catch(e => { document.body.innerHTML = '<p style="padding:20px">' + esc(t('Не вдалося підключитись до локального сервера: ')) + esc(e.message) + '</p>'; });
 </script>
 </body>
 </html>

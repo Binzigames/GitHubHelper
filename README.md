@@ -2,13 +2,14 @@
 
 # GitHub Helper
 
-**A friendly, zero-dependency desktop-style UI for everyday Git & GitHub tasks on Windows.**
+**A friendly, zero-dependency desktop-style UI for everyday Git & GitHub tasks on Windows and Linux.**
 
 Commit, branch, sync, clone and publish — without memorizing a single command.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
+![Platform: Windows | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0078D6)
 ![PowerShell 5.1+](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)
+![Python 3.7+](https://img.shields.io/badge/Python-3.7%2B-3776AB?logo=python&logoColor=white)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![Languages: EN / UK](https://img.shields.io/badge/UI-EN%20%7C%20UK-orange)
 
@@ -58,15 +59,43 @@ It runs **entirely on your machine**. There is no cloud service, no telemetry an
 
 ## Getting started
 
-### Requirements
+The project has one client per platform, each in its own folder, sharing the same UI (`ui/`):
 
-- Windows 10 / 11
-- Windows PowerShell 5.1 (preinstalled with Windows)
-- Microsoft Edge (preinstalled) — any default browser works as a fallback
+| Folder | Platform | Server |
+|---|---|---|
+| [`windows/`](windows) | Windows 10 / 11 | PowerShell 5.1 (`server.ps1`, launched by `start.cmd`) |
+| [`linux/`](linux) | Linux | Python 3.7+ (`server.py`, launched by `start.sh`) |
 
 Git and the GitHub CLI (`gh`) are **optional to install beforehand**: GitHub Helper can set them up for you.
 
-### Run
+### Quick start (any OS)
+
+The **`start.cmd`** in the repo root works on both systems — double-click it on Windows, or run `./start.cmd` on Linux (it hands over to the right client).
+Once the app window is open the console closes by itself.
+
+### App icon and menu entry
+
+GitHub Helper ships with its own icon ([`assets/`](assets)) and registers itself as a regular app named **GitHub Helper** on first start, so you don't need to run `start.cmd` by hand:
+
+- **Windows** — a Start Menu entry (type "GitHub Helper" in Start; pin it to the taskbar if you like). For a Desktop shortcut too: `powershell -File windows\create-shortcut.ps1 -Desktop`.
+- **Linux** — an application-menu entry (`~/.local/share/applications/githubhelper.desktop`).
+
+Opt out with `-NoShortcut` (Windows) or `--no-shortcut` (Linux). `assets/make-icons.ps1` regenerates `icon.png` / `icon.ico` from the logo.
+
+### Auto-update
+
+On every start a title screen shows the current version while the app checks the `VERSION` file on GitHub (`main` branch).
+If a newer version exists, it is installed automatically and the app restarts itself on the same window:
+
+- a **git clone** is updated with `git pull --ff-only` — and only if it has no local changes (otherwise the update is skipped);
+- a **downloaded copy** (no `.git`) is updated from the repository's `main` zip.
+
+If you're offline or the check fails, the app simply starts. Pass `-NoUpdate` (Windows) or `--no-update` (Linux) to disable the check.
+To publish a release as the maintainer: bump the number in [`VERSION`](VERSION) and push to `main`.
+
+### Windows
+
+Requirements: Windows PowerShell 5.1 (preinstalled) and Microsoft Edge (preinstalled; any default browser works as a fallback).
 
 ```bash
 git clone https://github.com/Binzigames/GitHubHelper.git
@@ -74,14 +103,13 @@ cd GitHubHelper
 start.cmd
 ```
 
-Or simply double-click **`start.cmd`**. The app opens in its own window.
-
-### Command-line options
+The app opens in its own window and the console is hidden; the server log is `%APPDATA%\GitHubHelper\server.log`.
+To see the server output, run `server.ps1` directly (below).
 
 `server.ps1` accepts a few switches if you want to run it directly:
 
 ```powershell
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File .\server.ps1 [-Port 47321] [-NoBrowser] [-SkipInstall]
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\server.ps1 [-Port 47321] [-NoBrowser] [-SkipInstall] [-NoUpdate] [-NoShortcut]
 ```
 
 | Option | Description |
@@ -89,22 +117,55 @@ powershell -NoProfile -STA -ExecutionPolicy Bypass -File .\server.ps1 [-Port 473
 | `-Port <n>` | Port for the local server (default `47321`). |
 | `-NoBrowser` | Do not open a window automatically. |
 | `-SkipInstall` | Never offer to install Git / GitHub CLI. |
+| `-NoUpdate` | Do not check GitHub for a newer version. |
+| `-NoShortcut` | Do not create the Start Menu entry. |
+
+### Linux
+
+Requirements: `python3` (3.7+, standard library only) and a browser (Chrome / Chromium / Edge / Brave open in their own app-style window; anything else falls back to `xdg-open`).
+Optional helpers: `zenity` or `kdialog` for the folder picker, `xdg-open` for "open in file manager".
+
+```bash
+git clone https://github.com/Binzigames/GitHubHelper.git
+cd GitHubHelper
+chmod +x start.cmd linux/start.sh   # only if the executable bit was lost
+./start.cmd        # or ./linux/start.sh
+```
+
+Once the window is open the server detaches from the terminal; its log is `~/.config/GitHubHelper/server.log`.
+
+```bash
+python3 linux/server.py [--port 47321] [--no-browser] [--no-autoexit] [--foreground] [--no-update]
+```
+
+| Option | Description |
+|---|---|
+| `--port <n>` | Port for the local server (default `47321`). |
+| `--no-browser` | Do not open a window automatically. |
+| `--no-autoexit` | Keep running after the window is closed. |
+| `--foreground` | Stay attached to the terminal instead of detaching. |
+| `--no-update` | Do not check GitHub for a newer version. |
+| `--no-shortcut` | Do not add the application-menu entry. |
+
+Missing Git / GitHub CLI are installed from the app's banner via `apt` / `dnf` / `pacman` / `zypper` / `apk` (asks for privileges through `pkexec` or `sudo`);
+`gh` falls back to a checksum-verified download into `~/.local/bin`.
+Your repository list is stored in `~/.config/GitHubHelper/repos.json`.
 
 ## How it works
 
 ```
 ┌──────────────┐   HTTP (127.0.0.1)   ┌──────────────┐   git / gh   ┌────────────┐
-│  index.html  │ ───────────────────▶ │  server.ps1  │ ───────────▶ │  your repo │
-│  (UI, no JS  │ ◀─────────────────── │ (PowerShell) │ ◀─────────── │  & GitHub  │
+│ ui/index.html│ ───────────────────▶ │  server.ps1  │ ───────────▶ │  your repo │
+│  (UI, no JS  │ ◀─────────────────── │  or server.py│ ◀─────────── │  & GitHub  │
 │  frameworks) │        JSON          └──────────────┘              └────────────┘
 └──────────────┘
 ```
 
-- **`index.html`** — the whole interface in a single file: plain HTML, CSS and JavaScript, no build step.
-- **`server.ps1`** — a tiny local web server written in PowerShell that translates UI actions into `git` and `gh` commands.
-- **`start.cmd`** — launcher that starts the server with the right flags.
+- **`ui/index.html`** — the whole interface in a single file: plain HTML, CSS and JavaScript, no build step. Shared by both clients.
+- **`windows/server.ps1`** — a tiny local web server written in PowerShell that translates UI actions into `git` and `gh` commands; `windows/start.cmd` launches it.
+- **`linux/server.py`** — the same server for Linux, written in Python (standard library only); `linux/start.sh` launches it.
 
-Your list of repositories is stored in `%APPDATA%\GitHubHelper\repos.json`. Nothing else is persisted.
+Your list of repositories is stored in `%APPDATA%\GitHubHelper\repos.json` (Windows) or `~/.config/GitHubHelper/repos.json` (Linux). Nothing else is persisted.
 
 ## Security & privacy
 

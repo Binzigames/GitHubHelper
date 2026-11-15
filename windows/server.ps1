@@ -1,12 +1,18 @@
 # GitHub Helper - local server (PowerShell 5.1+, no dependencies except git)
 # Serves the UI on http://127.0.0.1:<port> and translates UI actions into git / gh commands.
-param([int]$Port = 47321, [switch]$NoBrowser, [switch]$SkipInstall)
+param([int]$Port = 47321, [switch]$NoBrowser, [switch]$SkipInstall, [switch]$NoUpdate, [switch]$Restarted, [switch]$NoShortcut)
 
 $ErrorActionPreference = 'Stop'
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptPath = $MyInvocation.MyCommand.Path
+$AppRoot = Split-Path -Parent $Root
+$UiFile  = Join-Path $AppRoot 'ui\index.html'   # UI shared with the Linux client
+$UpdateRepo = 'Binzigames/GitHubHelper'          # where new versions are published (branch main, file VERSION)
+$script:restart = $false
 $DataDir = Join-Path $env:APPDATA 'GitHubHelper'
 $ReposFile = Join-Path $DataDir 'repos.json'
 New-Item -ItemType Directory -Force $DataDir | Out-Null
+try { Start-Transcript -Path (Join-Path $DataDir 'server.log') -Force | Out-Null } catch { }   # the console is hidden by start.cmd; keep a log
 
 # ---------- tool discovery ----------
 function Find-Exe($name, $extra) {
@@ -184,12 +190,78 @@ function Cut([string]$s, [int]$max = 600000) {
     return $s
 }
 
+# ---------- auto-update ----------
+function Get-LocalVersion {
+    $f = Join-Path $AppRoot 'VERSION'
+    if (Test-Path -LiteralPath $f) { return (Get-Content -LiteralPath $f -Raw).Trim() }
+    return '0.0.0'
+}
+function ConvertTo-Ver([string]$s) {
+    if ($s -notmatch '^\d+(\.\d+){0,3}$') { return $null }
+    $p = @($s.Split('.') | ForEach-Object { [int]$_ })
+    while ($p.Count -lt 4) { $p += 0 }
+    return [version]($p -join '.')
+}
+# Compares the local VERSION with the one on GitHub. Never throws: offline / errors just mean "no update".
+function Check-Update {
+    $cur = Get-LocalVersion
+    $res = @{ current = $cur; latest = $cur; available = $false }
+    if ($NoUpdate) { return $res }
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $r = Invoke-WebRequest "https://raw.githubusercontent.com/$UpdateRepo/main/VERSION" -UseBasicParsing -TimeoutSec 6 -Headers @{ 'Cache-Control' = 'no-cache' }
+        $txt = $r.Content
+        if ($txt -is [byte[]]) { $txt = [Text.Encoding]::UTF8.GetString($txt) }
+        $latest = ([string]$txt).Trim()
+        $a = ConvertTo-Ver $cur; $b = ConvertTo-Ver $latest
+        if ($a -and $b) { $res.latest = $latest; $res.available = ($b -gt $a) }
+    } catch { }
+    return $res
+}
+# Git checkouts are updated with a fast-forward pull (never touching local changes); plain downloads get the new zip.
+function Install-Update {
+    if ($NoUpdate) { throw 'Updates are disabled.' }
+    $before = ConvertTo-Ver (Get-LocalVersion)
+    if (Test-Path -LiteralPath (Join-Path $AppRoot '.git')) {
+        $st = G $AppRoot @('status', '--porcelain') -Fail
+        if ($st.out.Trim()) { throw 'This copy is a git checkout with local changes - update it manually with "git pull".' }
+        G $AppRoot @('pull', '--ff-only') -Fail | Out-Null
+    } else {
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $tmp = Join-Path $env:TEMP ('ghh-up-' + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force $tmp | Out-Null
+        try {
+            $zip = Join-Path $tmp 'update.zip'
+            Invoke-WebRequest "https://github.com/$UpdateRepo/archive/refs/heads/main.zip" -OutFile $zip -UseBasicParsing
+            $ex = Join-Path $tmp 'x'; Expand-Archive $zip $ex -Force
+            $top = Get-ChildItem $ex -Directory | Select-Object -First 1
+            foreach ($need in @('VERSION', 'ui\index.html', 'windows\server.ps1', 'linux\server.py')) {
+                if (-not $top -or -not (Test-Path -LiteralPath (Join-Path $top.FullName $need))) { throw 'Downloaded update is incomplete.' }
+            }
+            Get-ChildItem $top.FullName -Force | Where-Object { $_.Name -ne 'VERSION' } | Copy-Item -Destination $AppRoot -Recurse -Force
+            Copy-Item (Join-Path $top.FullName 'VERSION') $AppRoot -Force   # last, so a half-finished copy is retried next time
+        } finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    $after = ConvertTo-Ver (Get-LocalVersion)
+    if (-not $after -or ($before -and $after -le $before)) { throw 'The update did not change the version.' }
+    $script:restart = $true
+}
+# Starts a fresh copy of this script on the same port (it waits for the port to be released) and lets this one exit.
+function Do-Restart {
+    try { $listener.Stop() } catch { }
+    $a = @('-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $ScriptPath + '"'), '-Port', $Port, '-NoBrowser', '-Restarted')
+    if ($SkipInstall) { $a += '-SkipInstall' }
+    Start-Process powershell -ArgumentList $a
+}
+
 # ---------- API ----------
 function Api([string]$name, $b) {
     $repo = [string]$b.repo
 
     # Only operate on repositories the user has added in the app.
-    $exempt = @('state', 'pickfolder', 'install', 'ghlogin', 'ghloginStatus', 'ghloginCancel', 'ghlogout', 'setIdentity', 'addRepo', 'removeRepo', 'init', 'clone')
+    $exempt = @('state', 'pickfolder', 'install', 'ghlogin', 'ghloginStatus', 'ghloginCancel', 'ghlogout', 'setIdentity', 'addRepo', 'removeRepo', 'init', 'clone', 'updateCheck', 'updateInstall')
     if (($exempt -notcontains $name) -and -not ($name -eq 'open' -and [string]$b.what -eq 'url')) {
         if (-not @(Load-Repos | Where-Object { $_ -ieq $repo })) { throw 'Unknown repository.' }
     }
@@ -211,8 +283,11 @@ function Api([string]$name, $b) {
                 $email = (G $null @('config', '--global', 'user.email')).out.Trim()
             }
             $list = @(Load-Repos | Where-Object { Test-Path -LiteralPath $_ })
-            return @{ git = [bool](Get-Git); gh = [bool]$gh; ghAuthed = $authed; ghUser = $ghUser; repos = $list; userName = $name_; userEmail = $email; docs = [Environment]::GetFolderPath('MyDocuments') }
+            return @{ git = [bool](Get-Git); gh = [bool]$gh; ghAuthed = $authed; ghUser = $ghUser; repos = $list; userName = $name_; userEmail = $email; docs = [Environment]::GetFolderPath('MyDocuments'); sep = '\'; os = 'windows' }
         }
+
+        'updateCheck'   { return (Check-Update) }
+        'updateInstall' { Install-Update; return @{ ok = $true } }
 
         'pickfolder' {
             Add-Type -AssemblyName System.Windows.Forms
@@ -350,7 +425,12 @@ function Api([string]$name, $b) {
                 if ($e.Length -lt 4) { continue }
                 $x = [string]$e[0]; $y = [string]$e[1]; $orig = $null
                 if (($x -eq 'R') -or ($x -eq 'C') -or ($y -eq 'R') -or ($y -eq 'C')) { $orig = $parts[$i]; $i++ }
-                [void]$files.Add(@{ path = $e.Substring(3); x = $x; y = $y; orig = $orig })
+                $m = $null   # mtime+size lets the UI notice edits to files that were already modified
+                if ($files.Count -lt 500) {
+                    $fi = New-Object System.IO.FileInfo (Join-Path $repo $e.Substring(3))
+                    if ($fi.Exists) { $m = "$($fi.LastWriteTimeUtc.Ticks)-$($fi.Length)" }
+                }
+                [void]$files.Add(@{ path = $e.Substring(3); x = $x; y = $y; orig = $orig; m = $m })
             }
             $br = G $repo @('symbolic-ref', '--short', '-q', 'HEAD')
             $branch = if ($br.code -eq 0) { $br.out.Trim() } else { '(detached HEAD)' }
@@ -367,7 +447,8 @@ function Api([string]$name, $b) {
             $rurl = if ($remote) { (G $repo @('remote', 'get-url', $remote)).out.Trim() } else { $null }
             $last = if ($has) { (G $repo @('log', '-1', '--format=%s')).out.Trim() } else { $null }
             $merging = Test-Path -LiteralPath (Join-Path $repo '.git\MERGE_HEAD')
-            return @{ branch = $branch; hasCommits = $has; upstream = $upstream; ahead = $ahead; behind = $behind
+            $headSha = if ($has) { (G $repo @('rev-parse', 'HEAD')).out.Trim() } else { '' }
+            return @{ branch = $branch; head = $headSha; hasCommits = $has; upstream = $upstream; ahead = $ahead; behind = $behind
                       remote = $remote; remoteUrl = (Mask $rurl); webUrl = (To-WebUrl $rurl); lastSubject = $last; merging = $merging; files = $files.ToArray() }
         }
 
@@ -544,13 +625,19 @@ if (-not $SkipInstall) { Ensure-Deps }
 # ---------- HTTP server ----------
 $token = [Guid]::NewGuid().ToString('N')
 $listener = $null
-foreach ($p in $Port..($Port + 20)) {
-    try {
-        $l = New-Object System.Net.HttpListener
-        $l.Prefixes.Add("http://127.0.0.1:$p/")
-        $l.Start()
-        $listener = $l; $Port = $p; break
-    } catch { }
+# After an update restart we must come back on the very same port (the open window talks to it), so keep retrying it.
+$attempts = if ($Restarted) { 40 } else { 1 }
+$candidates = if ($Restarted) { @($Port) } else { @($Port..($Port + 20)) }
+for ($i = 0; $i -lt $attempts -and -not $listener; $i++) {
+    foreach ($p in $candidates) {
+        try {
+            $l = New-Object System.Net.HttpListener
+            $l.Prefixes.Add("http://127.0.0.1:$p/")
+            $l.Start()
+            $listener = $l; $Port = $p; break
+        } catch { }
+    }
+    if (-not $listener -and $Restarted) { Start-Sleep -Milliseconds 500 }
 }
 if (-not $listener) { Write-Host 'Could not open a local port.' -ForegroundColor Red; exit 1 }
 
@@ -558,6 +645,9 @@ $url = "http://127.0.0.1:$Port/"
 Write-Host "GitHub Helper is running at $url" -ForegroundColor Green
 Write-Host 'Close this window (or press Ctrl+C) to quit.'
 if (-not (Get-Git)) { Write-Host 'Git was not found - the app will offer to install it.' -ForegroundColor Yellow }
+
+# Start Menu entry "GitHub Helper" with the app icon (refreshed each start so it keeps pointing at this folder).
+if (-not $NoShortcut -and -not $Restarted) { try { & (Join-Path $Root 'create-shortcut.ps1') -Quiet } catch { } }
 
 if (-not $NoBrowser) {
     $edge = Find-Exe 'msedge' @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe")
@@ -582,10 +672,13 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 $lastRequest = Get-Date
 $seen = $false
 $script:byeAt = $null
+$startedAt = Get-Date
 try {
     while ($listener.IsListening) {
+        if ($script:restart) { Do-Restart; return }
         $task = $listener.GetContextAsync()
         while (-not $task.Wait(1000)) {
+            if ($Restarted -and -not $seen -and ((Get-Date) - $startedAt).TotalSeconds -gt 90) { Write-Host 'No window connected after the update - exiting.'; return }
             if ($seen -and ((Get-Date) - $lastRequest).TotalSeconds -gt 30) { Write-Host 'Window closed (no heartbeat for 30 s) - exiting.'; return }
             if (($script:byeAt) -and ((Get-Date) - $script:byeAt).TotalSeconds -gt 2) { Write-Host 'Window closed - exiting.'; return }
         }
@@ -597,7 +690,7 @@ try {
             $path = $req.Url.AbsolutePath
             if ($req.HttpMethod -eq 'GET' -and $path -eq '/') {
                 $seen = $true; $script:byeAt = $null; $lastRequest = Get-Date
-                $html = (Get-Content (Join-Path $Root 'index.html') -Raw -Encoding UTF8).Replace('__TOKEN__', $token)
+                $html = (Get-Content $UiFile -Raw -Encoding UTF8).Replace('__TOKEN__', $token).Replace('__VERSION__', (Get-LocalVersion))
                 Send $ctx 200 $utf8.GetBytes($html) 'text/html; charset=utf-8'
             }
             elseif ($req.HttpMethod -eq 'POST' -and $path -like '/api/*') {

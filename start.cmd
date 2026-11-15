@@ -1,4 +1,3 @@
+:; cd "$(dirname "$0")" && exec ./linux/start.sh "$@"
 @echo off
-title GitHub Helper
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0server.ps1"
-if errorlevel 1 pause
+call "%~dp0windows\start.cmd"
