@@ -176,6 +176,17 @@ Missing Git / GitHub CLI are installed from the app's banner via `apt` / `dnf` /
 `gh` falls back to a checksum-verified download into `~/.local/bin`.
 Your repository list is stored in `~/.config/GitHubHelper/repos.json`.
 
+### Unity package
+
+Open GitHub Helper from inside the Unity Editor (**Window → GitHub Helper**, Ctrl/Cmd+Shift+G) — it opens on the current project.
+In Package Manager choose **Add package from git URL** and paste:
+
+```
+https://github.com/Binzigames/GitHubHelper.git?path=/unity/com.binzigames.githubhelper
+```
+
+See [unity/com.binzigames.githubhelper](unity/com.binzigames.githubhelper/README.md). The app itself also accepts `-Repo <folder>` (Windows) / `--repo <folder>` (Linux, macOS) to open on a given folder.
+
 ## How it works
 
 ```

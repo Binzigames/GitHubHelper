@@ -215,7 +215,7 @@ const I18N = { en: {
   'Чекаю на підтвердження в браузері…': 'Waiting for confirmation in the browser…',
   'Копіювати код': 'Copy code', 'Скопійовано': 'Copied', 'Відкрити GitHub': 'Open GitHub',
   'Вхід виконано ✓': 'Signed in ✓', 'Не вдалося увійти': 'Sign-in failed',
-  'Вийти з GitHub?': 'Sign out of GitHub?', 'Ви вийшли з GitHub': 'Signed out of GitHub',
+  'Вийти з GitHub?': 'Sign out of GitHub?', 'Ви вийшли з GitHub': 'Signed out of GitHub', 'Ця папка ще не є Git-репозиторієм. Створити репозиторій тут?': 'This folder is not a Git repository yet. Create one here?',
   'Історія': 'History', 'Зміни': 'Changes', 'Оберіть файл': 'Select a file',
   '{n} змінених файлів': '{n} changed files', 'йде злиття': 'merge in progress',
   'Скасувати зміни': 'Discard changes', 'Немає змін ✨': 'No changes ✨',
@@ -382,8 +382,19 @@ function modal(title, fields, okLabel = 'OK') {
 async function boot() {
   document.documentElement.lang = LANG;
   S.app = await api('state');
-  // Always land on the welcome screen; the user picks a repository from there.
+  // Always land on the welcome screen; the user picks a repository from there
+  // (unless the app was launched for a specific folder, e.g. from the Unity package: ?repo=<path>).
   renderBanner(); renderAll();
+  let want = null;
+  try { want = new URLSearchParams(location.search).get('repo'); history.replaceState(null, '', location.pathname); } catch (e) { }
+  if (want) {
+    try { const r = await api('addRepo', { repo: want }); await afterRepoAdded(r.path); }
+    catch (e) {
+      if (confirm(t('Ця папка ще не є Git-репозиторієм. Створити репозиторій тут?') + '\n' + want)) {
+        try { const r = await api('init', { repo: want }); await afterRepoAdded(r.path); } catch (e2) { toast(e2.message, true); }
+      }
+    }
+  }
 }
 
 async function installDep(what) {

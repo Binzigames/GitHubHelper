@@ -1,0 +1,20 @@
+{
+  "name": "com.binzigames.githubhelper",
+  "displayName": "GitHub Helper",
+  "version": "1.4.0",
+  "unity": "2019.4",
+  "description": "Commit, branch, sync and publish your Unity project to GitHub without leaving the Editor. A friendly Git window (Window > GitHub Helper) that understands .meta files and shows live progress for push / pull / fetch.",
+  "keywords": [
+    "git",
+    "github",
+    "version control",
+    "commit",
+    "source control"
+  ],
+  "author": {
+    "name": "Binzigames",
+    "url": "https://github.com/Binzigames/GitHubHelper"
+  },
+  "documentationUrl": "https://github.com/Binzigames/GitHubHelper/tree/main/unity/com.binzigames.githubhelper",
+  "license": "MIT"
+}

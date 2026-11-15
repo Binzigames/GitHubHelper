@@ -1310,6 +1310,7 @@ def main():
     ap.add_argument('--foreground', action='store_true', help='stay attached to the terminal (default: detach once the window is open)')
     ap.add_argument('--no-update', action='store_true', help='do not check GitHub for a newer version')
     ap.add_argument('--no-shortcut', action='store_true', help='do not add GitHub Helper to the application menu')
+    ap.add_argument('--repo', default='', help='open the UI straight on this folder (used by the Unity package)')
     ap.add_argument('--restarted', action='store_true', help=argparse.SUPPRESS)   # set by the updater
     args = ap.parse_args()
     if args.build_app:
@@ -1368,6 +1369,9 @@ def main():
         httpd.shutdown()
 
     if not args.no_browser and not args.restarted:
+        if args.repo:
+            from urllib.parse import quote
+            url += '?repo=' + quote(args.repo, safe='')
         launch_window(url)
 
     # Once the window is up, detach from the terminal so it can be closed / reused (output goes to a log file).

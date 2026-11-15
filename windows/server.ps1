@@ -1,6 +1,6 @@
 # GitHub Helper - local server (PowerShell 5.1+, no dependencies: git / gh are fetched automatically when missing)
 # Serves the UI on http://127.0.0.1:<port> and translates UI actions into git / gh commands.
-param([int]$Port = 47321, [switch]$NoBrowser, [switch]$SkipInstall, [switch]$NoUpdate, [switch]$Restarted, [switch]$NoShortcut)
+param([int]$Port = 47321, [switch]$NoBrowser, [switch]$SkipInstall, [switch]$NoUpdate, [switch]$Restarted, [switch]$NoShortcut, [string]$Repo = '')
 
 $ErrorActionPreference = 'Stop'
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -802,6 +802,7 @@ if (-not (Get-Git)) { Write-Host 'Git was not found - the app will offer to inst
 # Start Menu entry "GitHub Helper" with the app icon (refreshed each start so it keeps pointing at this folder).
 if (-not $NoShortcut -and -not $Restarted) { try { & (Join-Path $Root 'create-shortcut.ps1') -Quiet } catch { } }
 
+if ($Repo) { $url = $url + '?repo=' + [Uri]::EscapeDataString($Repo) }   # open the UI straight on this folder (used by the Unity package)
 if (-not $NoBrowser) {
     $edge = Find-Exe 'msedge' @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe")
     if ($edge) { Start-Process $edge -ArgumentList "--app=$url", '--window-size=1300,820' } else { Start-Process $url }
