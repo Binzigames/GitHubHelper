@@ -2,12 +2,12 @@
 
 # GitHub Helper
 
-**A friendly, zero-dependency desktop-style UI for everyday Git & GitHub tasks on Windows and Linux.**
+**A friendly, zero-dependency desktop-style UI for everyday Git & GitHub tasks on Windows, macOS and Linux.**
 
 Commit, branch, sync, clone and publish — without memorizing a single command.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Platform: Windows | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0078D6)
+![Platform: Windows | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6)
 ![PowerShell 5.1+](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)
 ![Python 3.7+](https://img.shields.io/badge/Python-3.7%2B-3776AB?logo=python&logoColor=white)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen)
@@ -38,7 +38,8 @@ It runs **entirely on your machine**. There is no cloud service, no telemetry an
 | ☁️ **Publish to GitHub** | Turn a local folder into a public or private GitHub repository in one click. |
 | ⬇️ **Clone** | Clone by URL or `owner/repo` shorthand into a folder of your choice. |
 | 🔐 **Sign in with GitHub** | Browser-based device login powered by the official GitHub CLI. |
-| 🧰 **Auto-setup** | Missing Git or GitHub CLI? The app installs them for you via `winget`. |
+| 🧰 **Self-contained** | No Git or GitHub CLI on the machine? The app downloads its own private copies on first start (no installer, no admin rights) and shows the progress. |
+| 📊 **Live progress** | Downloads, updates, clone, fetch, pull and push show a progress bar with percent and speed. |
 | 📦 **Stash & undo** | Stash/pop work in progress, undo the last commit (keeping your changes), abort a merge. |
 | 🚀 **Quick actions** | Open on GitHub, create a Pull Request, open in Explorer, VS Code or a terminal. |
 | 🌍 **Bilingual** | English and Ukrainian interface, switchable on the fly. |
@@ -65,19 +66,43 @@ The project has one client per platform, each in its own folder, sharing the sam
 |---|---|---|
 | [`windows/`](windows) | Windows 10 / 11 | PowerShell 5.1 (`server.ps1`, launched by `start.cmd`) |
 | [`linux/`](linux) | Linux | Python 3.7+ (`server.py`, launched by `start.sh`) |
+| [`mac/`](mac) | macOS 10.13+ | the same Python server (`linux/server.py`), launched by `start.command` or the `.app` build |
 
-Git and the GitHub CLI (`gh`) are **optional to install beforehand**: GitHub Helper can set them up for you.
+Git and the GitHub CLI (`gh`) are **not required beforehand**. On Windows the app downloads private portable copies (MinGit + `gh`, checksum-verified) into `%LOCALAPPDATA%\GitHubHelper\tools` on first start; on Linux / macOS it fetches `gh` the same way (into `~/.local/bin`) and offers to install Git through the system package manager (Git cannot be bundled there). Installed system-wide copies are used when present.
 
 ### Quick start (any OS)
 
 The **`start.cmd`** in the repo root works on both systems — double-click it on Windows, or run `./start.cmd` on Linux (it hands over to the right client).
 Once the app window is open the console closes by itself.
 
+### macOS
+
+Requirements: `python3` (macOS asks to install the Command Line Tools on first use: `xcode-select --install`) and, ideally, Chrome / Edge / Brave for the app-style window (Safari works through the default-browser fallback).
+
+```bash
+git clone https://github.com/Binzigames/GitHubHelper.git
+cd GitHubHelper
+./mac/start.command        # or double-click mac/start.command in Finder
+```
+
+On first start the app adds **`~/Applications/GitHub Helper.app`** (icon included — find it in Launchpad / Spotlight). Missing Git / `gh` are installed through Homebrew when available (`gh` otherwise via a checksum-verified download into `~/.local/bin`; for Git use `xcode-select --install`).
+Your repository list lives in `~/Library/Application Support/GitHubHelper/`.
+
+**Self-contained build** (a `.app` you can zip and hand to someone — it carries its own copy of the program and auto-updates itself):
+
+```bash
+./mac/build-app.sh dist     # → dist/GitHub Helper.app
+```
+
+Optionally the same build can run in the cloud: copy [`mac/build-mac.yml.example`](mac/build-mac.yml.example) to `.github/workflows/build-mac.yml` (pushing a workflow file needs `gh auth refresh -s workflow`), then run it manually or push a `v*` tag to get `GitHub-Helper-macOS.zip` attached to the release.
+The build is not code-signed, so on first open use right-click → **Open** (or `xattr -dr com.apple.quarantine "GitHub Helper.app"`).
+
 ### App icon and menu entry
 
 GitHub Helper ships with its own icon ([`assets/`](assets)) and registers itself as a regular app named **GitHub Helper** on first start, so you don't need to run `start.cmd` by hand:
 
 - **Windows** — a Start Menu entry (type "GitHub Helper" in Start; pin it to the taskbar if you like). For a Desktop shortcut too: `powershell -File windows\create-shortcut.ps1 -Desktop`.
+- **macOS** — `~/Applications/GitHub Helper.app`.
 - **Linux** — an application-menu entry (`~/.local/share/applications/githubhelper.desktop`).
 
 Opt out with `-NoShortcut` (Windows) or `--no-shortcut` (Linux). `assets/make-icons.ps1` regenerates `icon.png` / `icon.ico` from the logo.

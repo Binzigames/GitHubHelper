@@ -23,14 +23,20 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+IS_MAC = sys.platform == 'darwin'   # this server runs on both Linux and macOS
 ROOT = os.path.dirname(os.path.abspath(__file__))
 UI_FILE = os.path.join(os.path.dirname(ROOT), 'ui', 'index.html')
-DATA_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'), 'GitHubHelper')
+if IS_MAC:
+    DATA_DIR = os.path.expanduser('~/Library/Application Support/GitHubHelper')
+else:
+    DATA_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'), 'GitHubHelper')
 REPOS_FILE = os.path.join(DATA_DIR, 'repos.json')
 LOCAL_BIN = os.path.expanduser('~/.local/bin')
 
 API_LOCK = threading.Lock()
 LOGIN = {'proc': None, 'err': [], 'out': []}
+STATE_TTL = 30        # seconds the git/gh/identity info is cached
+CACHE = {'exe': {}, 'state': None, 'state_at': 0.0, 'remote': {}, 'subject': {}, 'gitdir': {}}
 
 
 class ApiError(Exception):
@@ -39,14 +45,20 @@ class ApiError(Exception):
 
 # ---------- tool discovery ----------
 def find_exe(name):
+    """Resolve an executable once and remember it (shutil.which walks PATH on every call)."""
+    c = CACHE['exe'].get(name)
+    if c and os.path.isfile(c):
+        return c
     p = shutil.which(name)
+    if not p:
+        for d in (LOCAL_BIN, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/snap/bin'):
+            c = os.path.join(d, name)
+            if os.path.isfile(c) and os.access(c, os.X_OK):
+                p = c
+                break
     if p:
-        return p
-    for d in (LOCAL_BIN, '/usr/local/bin', '/usr/bin', '/snap/bin'):
-        c = os.path.join(d, name)
-        if os.path.isfile(c) and os.access(c, os.X_OK):
-            return c
-    return None
+        CACHE['exe'][name] = p
+    return p
 
 
 def get_git():
@@ -75,6 +87,9 @@ def priv_prefix():
 def pm_commands(what):
     """Return the list of commands (without privilege prefix) that install the package, or None."""
     pkg = 'gh' if what == 'gh' else 'git'
+    if IS_MAC:
+        brew = find_exe('brew')
+        return [[brew, 'install', pkg]] if brew else None
     if shutil.which('apt-get'):
         return [['apt-get', 'update'], ['apt-get', 'install', '-y', pkg]]
     if shutil.which('dnf'):
@@ -88,26 +103,69 @@ def pm_commands(what):
     return None
 
 
+# ---------- progress reporting ----------
+# The window polls the 'progress' endpoint while a long operation runs; operations publish their state here.
+PROG = {'active': False, 'op': '', 'what': '', 'phase': '', 'pct': -1, 'detail': '', 'bytes': 0, 'total': 0}
+
+
+def prog_start(op, what=''):
+    PROG.update({'active': True, 'op': op, 'what': what, 'phase': '', 'pct': -1, 'detail': '', 'bytes': 0, 'total': 0})
+
+
+def prog_end():
+    PROG['active'] = False
+
+
+# git writes e.g. "Receiving objects:  45% (450/1000), 1.2 MiB | 2.0 MiB/s" (lines separated by \r).
+GIT_PROGRESS = re.compile(r'^(?:remote:\s*)?([A-Za-z][A-Za-z ]*?):\s+(\d+)%\s*(.*)$')
+
+
+def parse_progress(line):
+    m = GIT_PROGRESS.match(line)
+    if m:
+        PROG['phase'], PROG['pct'] = m.group(1).strip(), int(m.group(2))
+        PROG['detail'] = m.group(3).strip().rstrip(',. ')
+
+
+def download(url, dest):
+    """Download url to dest in chunks, publishing bytes / percent for the window's progress bar."""
+    req = urllib.request.Request(url, headers={'User-Agent': 'GitHubHelper'})
+    with urllib.request.urlopen(req, timeout=30) as r, open(dest, 'wb') as f:
+        total = int(r.headers.get('Content-Length') or 0)
+        got, last = 0, 0.0
+        while True:
+            chunk = r.read(65536)
+            if not chunk:
+                break
+            f.write(chunk)
+            got += len(chunk)
+            if time.time() - last > 0.15:
+                last = time.time()
+                PROG['bytes'], PROG['total'] = got, total
+                PROG['pct'] = int(100 * got / total) if total else -1
+        PROG['bytes'], PROG['total'], PROG['pct'] = got, total, 100
+
+
+# ---------- private tools (no root needed) ----------
 def install_direct_gh():
     """Download the official GitHub CLI release into ~/.local/bin (checksum verified)."""
     arch = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64',
             'i386': '386', 'i686': '386', 'armv6l': 'armv6', 'armv7l': 'armv6'}.get(platform.machine().lower())
     if not arch:
         raise ApiError('Unsupported CPU architecture: ' + platform.machine())
-    req = urllib.request.Request('https://api.github.com/repos/cli/cli/releases/latest', headers={'User-Agent': 'GitHubHelper'})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        rel = json.loads(r.read().decode('utf-8'))
-    assets = rel.get('assets', [])
-    asset = next((a for a in assets if re.search(r'_linux_%s\.tar\.gz$' % arch, a['name'])), None)
-    if not asset:
-        raise ApiError('No Linux download found for GitHub CLI.')
+    prog_start('download', 'gh')
     tmp = tempfile.mkdtemp(prefix='ghh-dl-')
     try:
+        req = urllib.request.Request('https://api.github.com/repos/cli/cli/releases/latest', headers={'User-Agent': 'GitHubHelper'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            rel = json.loads(r.read().decode('utf-8'))
+        assets = rel.get('assets', [])
+        pattern = r'_macOS_%s\.(zip|tar\.gz)$' if IS_MAC else r'_linux_%s\.tar\.gz$'
+        asset = next((a for a in assets if re.search(pattern % arch, a['name'])), None)
+        if not asset:
+            raise ApiError('No download found for GitHub CLI on this system.')
         archive = os.path.join(tmp, asset['name'])
-        print('Downloading %s ...' % asset['name'])
-        req = urllib.request.Request(asset['browser_download_url'], headers={'User-Agent': 'GitHubHelper'})
-        with urllib.request.urlopen(req, timeout=120) as r, open(archive, 'wb') as f:
-            shutil.copyfileobj(r, f)
+        download(asset['browser_download_url'], archive)
         sum_asset = next((a for a in assets if a['name'].endswith('checksums.txt')), None)
         if sum_asset:
             req = urllib.request.Request(sum_asset['browser_download_url'], headers={'User-Agent': 'GitHubHelper'})
@@ -124,41 +182,65 @@ def install_direct_gh():
                     h.update(chunk)
             if not expected or h.hexdigest() != expected:
                 raise ApiError('Checksum mismatch - download discarded.')
+        PROG['op'], PROG['pct'] = 'extract', -1
         os.makedirs(LOCAL_BIN, exist_ok=True)
         dest = os.path.join(LOCAL_BIN, 'gh')
-        with tarfile.open(archive) as t:
-            member = next((m for m in t.getmembers() if m.isfile() and m.name.endswith('/bin/gh')), None)
-            if not member:
-                raise ApiError('gh binary not found in the downloaded archive.')
-            src = t.extractfile(member)
-            with open(dest + '.tmp', 'wb') as out:
-                shutil.copyfileobj(src, out)
+        if archive.endswith('.zip'):
+            import zipfile
+            with zipfile.ZipFile(archive) as z:
+                name = next((n for n in z.namelist() if n.endswith('/bin/gh')), None)
+                if not name:
+                    raise ApiError('gh binary not found in the downloaded archive.')
+                with z.open(name) as src, open(dest + '.tmp', 'wb') as out:
+                    shutil.copyfileobj(src, out)
+        else:
+            with tarfile.open(archive) as t:
+                member = next((m for m in t.getmembers() if m.isfile() and m.name.endswith('/bin/gh')), None)
+                if not member:
+                    raise ApiError('gh binary not found in the downloaded archive.')
+                src = t.extractfile(member)
+                with open(dest + '.tmp', 'wb') as out:
+                    shutil.copyfileobj(src, out)
         os.chmod(dest + '.tmp', 0o755)
         os.replace(dest + '.tmp', dest)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+        prog_end()
+    CACHE['exe'].pop('gh', None)
 
 
 def install_dep(what):
-    cmds = pm_commands(what)
-    prefix = priv_prefix()
-    shown = ' && '.join('sudo ' + ' '.join(c) for c in cmds) if cmds else None
-    if cmds and prefix is not None:
-        print('Installing %s with the system package manager...' % what)
-        ok = True
-        for c in cmds:
-            r = subprocess.run(prefix + c, stdin=subprocess.DEVNULL)
-            if r.returncode != 0:
-                ok = False
-                break
-        if ok and test_dep(what):
-            return True
+    """gh: private download (no root). git: the system package manager (git cannot be bundled on Linux / macOS)."""
+    CACHE['state'] = None
     if what == 'gh':
         try:
             install_direct_gh()
         except Exception as e:  # noqa: BLE001
             print('Direct download failed: %s' % e)
+        if test_dep('gh'):
+            return True
+    cmds = pm_commands(what)
+    prefix = [] if IS_MAC else priv_prefix()   # Homebrew must not run as root / via sudo
+    shown = ' && '.join(('' if IS_MAC else 'sudo ') + ' '.join(c) for c in cmds) if cmds else None
+    if cmds and prefix is not None:
+        print('Installing %s with the system package manager...' % what)
+        prog_start('install', what)   # no byte counts from package managers: indeterminate bar
+        try:
+            ok = True
+            for c in cmds:
+                r = subprocess.run(prefix + c, stdin=subprocess.DEVNULL)
+                if r.returncode != 0:
+                    ok = False
+                    break
+        finally:
+            prog_end()
+        CACHE['exe'].pop(what, None)
+        if ok and test_dep(what):
+            return True
+    if what == 'gh':
         return test_dep('gh')
+    if IS_MAC and not shown:
+        raise ApiError('Git is not installed. Run "xcode-select --install" (or install Homebrew and "brew install git"), then restart the app.')
     hint = ' Run in a terminal: ' + shown if shown else ''
     raise ApiError('Could not install git automatically.%s' % hint)
 
@@ -201,13 +283,52 @@ def invoke_exe(exe, cwd, args, stdin=None):
     return Res(p.returncode, p.stdout.decode('utf-8', 'replace'), p.stderr.decode('utf-8', 'replace'))
 
 
-def G(repo, git_args, stdin=None, fail=False):
+def invoke_live(exe, cwd, args, op):
+    """Like invoke_exe, but publishes git's progress lines while the process runs (clone / fetch / pull / push)."""
+    env = dict(os.environ)
+    env['GIT_TERMINAL_PROMPT'] = '0'
+    env['GIT_EDITOR'] = 'true'
+    env['GCM_INTERACTIVE'] = 'auto'
+    env['GH_PROMPT_DISABLED'] = '1'
+    env['GH_NO_UPDATE_NOTIFIER'] = '1'
+    prog_start(op)
+    try:
+        p = subprocess.Popen([exe] + list(args), cwd=cwd or None, env=env, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out_chunks, err_chunks = [], []
+
+        def read_out():
+            out_chunks.append(p.stdout.read())
+
+        t = threading.Thread(target=read_out, daemon=True)
+        t.start()
+        line = b''
+        while True:
+            chunk = os.read(p.stderr.fileno(), 2048)
+            if not chunk:
+                break
+            err_chunks.append(chunk)
+            for ch in chunk:
+                if ch in (10, 13):   # \n or \r: git redraws progress lines with \r
+                    if line:
+                        parse_progress(line.decode('utf-8', 'replace'))
+                        line = b''
+                else:
+                    line += bytes((ch,))
+        p.wait()
+        t.join(5)
+        return Res(p.returncode, b''.join(out_chunks).decode('utf-8', 'replace'), b''.join(err_chunks).decode('utf-8', 'replace'))
+    finally:
+        prog_end()
+
+
+def G(repo, git_args, stdin=None, fail=False, live=''):
     git = get_git()
     if not git:
         raise ApiError('Git is not installed. Use the "Install Git" button in the app.')
     allargs = ['-c', 'core.quotepath=false', '-c', 'color.ui=false', '-c', 'core.safecrlf=false',
                '-c', 'protocol.ext.allow=never', '-c', 'protocol.file.allow=user'] + list(git_args)
-    r = invoke_exe(git, repo, allargs, stdin)
+    r = invoke_live(git, repo, allargs, live) if live else invoke_exe(git, repo, allargs, stdin)
     if fail and r.code != 0:
         raise ApiError(r.err.strip() or r.out.strip())
     return r
@@ -296,15 +417,23 @@ def spawn(cmd, cwd=None):
                      start_new_session=True)
 
 
+def opener():
+    """The "open this file/folder/URL with the default app" command of the platform."""
+    return shutil.which('open' if IS_MAC else 'xdg-open')
+
+
 def open_url(url):
-    xdg = shutil.which('xdg-open')
-    if xdg:
-        spawn([xdg, url])
+    op = opener()
+    if op:
+        spawn([op, url])
     else:
         webbrowser.open(url)
 
 
 def open_terminal(cwd):
+    if IS_MAC:
+        spawn(['open', '-a', 'Terminal', cwd])
+        return
     candidates = [
         ('x-terminal-emulator', []),
         ('gnome-terminal', ['--working-directory=' + cwd]),
@@ -326,6 +455,11 @@ def open_terminal(cwd):
 
 def pick_folder(start):
     start = start if start and os.path.isdir(start) else os.path.expanduser('~')
+    if IS_MAC:
+        script = ('on run argv\nPOSIX path of (choose folder with prompt "GitHub Helper" default location (POSIX file (item 1 of argv)))\nend run')
+        r = subprocess.run(['osascript', '-e', script, start], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        path = r.stdout.decode('utf-8', 'replace').strip() if r.returncode == 0 else ''
+        return (path.rstrip('/') or '/') if path else None
     zen = shutil.which('zenity')
     if zen:
         r = subprocess.run([zen, '--file-selection', '--directory', '--filename=' + start.rstrip('/') + '/'],
@@ -417,13 +551,102 @@ def gh_login_status():
         gh = get_gh()
         if gh:
             invoke_exe(gh, None, ['auth', 'setup-git', '--hostname', 'github.com'])
+        CACHE['state'] = None
         return {'state': 'done'}
     return {'state': 'failed', 'error': err}
+
+
+# ---------- macOS .app bundle ----------
+def build_icns(png_bytes):
+    """Minimal .icns holding one 512x512 PNG ('ic09'); macOS scales it for every other size."""
+    import struct
+    body = b'ic09' + struct.pack('>I', len(png_bytes) + 8) + png_bytes
+    return b'icns' + struct.pack('>I', len(body) + 8) + body
+
+
+def build_mac_app(dest_dir, standalone=False):
+    """Create "GitHub Helper.app" in dest_dir.
+
+    standalone=False: the bundle launches this very checkout (a git pull updates the app).
+    standalone=True : the bundle carries its own copy of the program (for distributing a zip).
+    """
+    import shlex
+    app_root = os.path.dirname(ROOT)
+    app = os.path.join(dest_dir, 'GitHub Helper.app')
+    macos, res = os.path.join(app, 'Contents', 'MacOS'), os.path.join(app, 'Contents', 'Resources')
+    shutil.rmtree(app, ignore_errors=True)
+    os.makedirs(macos)
+    os.makedirs(res)
+    if standalone:
+        inner = os.path.join(res, 'app')
+        for rel in ('VERSION', 'ui', 'assets/icon.png', 'assets/icon.svg', 'linux/server.py'):
+            src, dst = os.path.join(app_root, *rel.split('/')), os.path.join(inner, *rel.split('/'))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.isdir(src):
+                shutil.copytree(src, dst)
+            else:
+                shutil.copy2(src, dst)
+        server = '"$(cd "$(dirname "$0")/../Resources/app/linux" && pwd)/server.py"'
+    else:
+        server = shlex.quote(os.path.join(ROOT, 'server.py'))
+    launcher = os.path.join(macos, 'GitHubHelper')
+    with open(launcher, 'w', encoding='utf-8') as f:
+        f.write('#!/bin/bash\n'
+                'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"\n'
+                'exec /usr/bin/env python3 %s --no-shortcut "$@"\n' % server)
+    os.chmod(launcher, 0o755)
+    version = '1.0.0'
+    try:
+        with open(os.path.join(app_root, 'VERSION'), 'r', encoding='utf-8') as f:
+            version = f.read().strip() or version
+    except OSError:
+        pass
+    with open(os.path.join(app, 'Contents', 'Info.plist'), 'w', encoding='utf-8') as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+                '<plist version="1.0"><dict>\n'
+                '<key>CFBundleName</key><string>GitHub Helper</string>\n'
+                '<key>CFBundleDisplayName</key><string>GitHub Helper</string>\n'
+                '<key>CFBundleIdentifier</key><string>com.binzigames.githubhelper</string>\n'
+                '<key>CFBundleExecutable</key><string>GitHubHelper</string>\n'
+                '<key>CFBundleIconFile</key><string>icon</string>\n'
+                '<key>CFBundlePackageType</key><string>APPL</string>\n'
+                '<key>CFBundleShortVersionString</key><string>%s</string>\n'
+                '<key>CFBundleVersion</key><string>%s</string>\n'
+                '<key>LSMinimumSystemVersion</key><string>10.13</string>\n'
+                '<key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>\n'
+                '<key>NSHighResolutionCapable</key><true/>\n'
+                '</dict></plist>\n' % (version, version))
+    try:
+        with open(os.path.join(app_root, 'assets', 'icon.png'), 'rb') as f:
+            icns = build_icns(f.read())
+        with open(os.path.join(res, 'icon.icns'), 'wb') as f:
+            f.write(icns)
+    except OSError:
+        pass
+    return app
+
+
+def ensure_mac_app():
+    """Put "GitHub Helper.app" into ~/Applications (Launchpad / Spotlight) pointing at this checkout."""
+    dest = os.path.expanduser('~/Applications')
+    try:
+        launcher = os.path.join(dest, 'GitHub Helper.app', 'Contents', 'MacOS', 'GitHubHelper')
+        if os.path.exists(launcher):
+            with open(launcher, 'r', encoding='utf-8') as f:
+                if os.path.join(ROOT, 'server.py') in f.read():
+                    return
+        os.makedirs(dest, exist_ok=True)
+        build_mac_app(dest)
+    except OSError:
+        pass
 
 
 # ---------- application menu entry ----------
 def ensure_desktop_entry():
     """Register "GitHub Helper" (with its icon) in the application menu: ~/.local/share/applications/githubhelper.desktop."""
+    if IS_MAC:
+        return ensure_mac_app()
     app_root = os.path.dirname(ROOT)
     icon = os.path.join(app_root, 'assets', 'icon.png')
     launcher = os.path.join(ROOT, 'start.sh')
@@ -512,16 +735,15 @@ def install_update():
     if os.path.exists(os.path.join(APP_ROOT, '.git')):
         if G(APP_ROOT, ['status', '--porcelain'], fail=True).out.strip():
             raise ApiError('This copy is a git checkout with local changes - update it manually with "git pull".')
-        G(APP_ROOT, ['pull', '--ff-only'], fail=True)
+        G(APP_ROOT, ['pull', '--ff-only', '--progress'], fail=True, live='update')
     else:
         import zipfile
         tmp = tempfile.mkdtemp(prefix='ghh-up-')
+        prog_start('update')
         try:
             archive = os.path.join(tmp, 'update.zip')
-            req = urllib.request.Request('https://github.com/%s/archive/refs/heads/main.zip' % UPDATE_REPO,
-                                         headers={'User-Agent': 'GitHubHelper'})
-            with urllib.request.urlopen(req, timeout=60) as r, open(archive, 'wb') as f:
-                shutil.copyfileobj(r, f)
+            download('https://github.com/%s/archive/refs/heads/main.zip' % UPDATE_REPO, archive)
+            PROG['op'], PROG['what'], PROG['pct'] = 'extract', 'update', 0
             with zipfile.ZipFile(archive) as z:
                 files = {}
                 for info in z.infolist():
@@ -534,19 +756,21 @@ def install_update():
                 for need in ('VERSION', 'ui/index.html', 'windows/server.ps1', 'linux/server.py'):
                     if need not in files:
                         raise ApiError('Downloaded update is incomplete.')
-                for rel in sorted(files, key=lambda x: x == 'VERSION'):   # VERSION last, so a half-finished copy is retried
+                for n, rel in enumerate(sorted(files, key=lambda x: x == 'VERSION')):   # VERSION last, so a half-finished copy is retried
+                    PROG['pct'] = int(100 * n / max(1, len(files)))
                     dest = os.path.join(APP_ROOT, *rel.split('/'))
                     os.makedirs(os.path.dirname(dest), exist_ok=True)
                     with z.open(files[rel]) as src, open(dest + '.new', 'wb') as out:
                         shutil.copyfileobj(src, out)
                     os.replace(dest + '.new', dest)
-            for rel in ('start.cmd', 'linux/start.sh', 'linux/server.py'):
+            for rel in ('start.cmd', 'linux/start.sh', 'linux/server.py', 'mac/start.command', 'mac/build-app.sh'):
                 try:
                     os.chmod(os.path.join(APP_ROOT, *rel.split('/')), 0o755)
                 except OSError:
                     pass
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+            prog_end()
     after = parse_ver(local_version())
     if not after or (before and after <= before):
         raise ApiError('The update did not change the version.')
@@ -559,7 +783,7 @@ def api(name, b):
 
     # Only operate on repositories the user has added in the app.
     exempt = ('state', 'pickfolder', 'install', 'ghlogin', 'ghloginStatus', 'ghloginCancel', 'ghlogout',
-              'setIdentity', 'addRepo', 'removeRepo', 'init', 'clone', 'updateCheck', 'updateInstall')
+              'setIdentity', 'addRepo', 'removeRepo', 'init', 'clone', 'updateCheck', 'updateInstall', 'ping', 'progress', 'ensureTools')
     if name not in exempt and not (name == 'open' and str(b.get('what')) == 'url'):
         if repo not in load_repos():
             raise ApiError('Unknown repository.')
@@ -570,20 +794,45 @@ def api(name, b):
     if name in ('addRemote', 'clone'):
         check_url(b.get('url'))
 
+    if name == 'ping':   # cheap heartbeat; the window calls it every few seconds
+        return {'ok': True}
+    if name == 'progress':   # live state of the running download / git operation
+        return dict(PROG)
+
+    if name == 'ensureTools':
+        # Called by the window right after the title screen: fetches a private gh when the machine has none.
+        # (git cannot be bundled on Linux / macOS: the banner offers the system package manager for it.)
+        res = {'ok': True, 'installed': [], 'error': None}
+        if not test_dep('gh'):
+            try:
+                if install_dep('gh'):
+                    res['installed'].append('gh')
+            except Exception as e:  # noqa: BLE001
+                res['ok'], res['error'] = False, mask(str(e))
+        CACHE['state'] = None
+        return res
+
     if name == 'state':
-        gh = get_gh()
-        authed, gh_user = False, ''
-        if gh:
-            authed = invoke_exe(gh, None, ['auth', 'status', '--hostname', 'github.com']).code == 0
-            if authed:
-                gh_user = invoke_exe(gh, None, ['api', 'user', '--jq', '.login']).out.strip()
-        uname, email = '', ''
-        if get_git():
-            uname = G(None, ['config', '--global', 'user.name']).out.strip()
-            email = G(None, ['config', '--global', 'user.email']).out.strip()
+        # git/gh/identity info needs several processes (and a network call for `gh api user`): cache it for STATE_TTL.
+        si = CACHE['state']
+        if si is None or time.time() - CACHE['state_at'] > STATE_TTL:
+            gh = get_gh()
+            authed, gh_user = False, ''
+            if gh:
+                authed = invoke_exe(gh, None, ['auth', 'status', '--hostname', 'github.com']).code == 0
+                if authed:
+                    gh_user = invoke_exe(gh, None, ['api', 'user', '--jq', '.login']).out.strip()
+            uname, email = '', ''
+            if get_git():
+                uname = G(None, ['config', '--global', 'user.name']).out.strip()
+                email = G(None, ['config', '--global', 'user.email']).out.strip()
+            si = {'git': bool(get_git()), 'gh': bool(gh), 'ghAuthed': authed, 'ghUser': gh_user,
+                  'userName': uname, 'userEmail': email}
+            CACHE['state'], CACHE['state_at'] = si, time.time()
         lst = [r for r in load_repos() if os.path.exists(r)]
-        return {'git': bool(get_git()), 'gh': bool(gh), 'ghAuthed': authed, 'ghUser': gh_user, 'repos': lst,
-                'userName': uname, 'userEmail': email, 'docs': docs_dir(), 'sep': '/', 'os': 'linux'}
+        out = dict(si)
+        out.update({'repos': lst, 'docs': docs_dir(), 'sep': '/', 'os': 'mac' if IS_MAC else 'linux'})
+        return out
 
     if name == 'updateCheck':
         return check_update()
@@ -608,6 +857,10 @@ def api(name, b):
         gh_login_cancel()
         return {'ok': True}
 
+    if name in ('ghlogout', 'setIdentity'):
+        CACHE['state'] = None
+    if name in ('addRemote', 'publish'):
+        CACHE['remote'].clear()
     if name == 'ghlogout':
         gh = get_gh()
         if not gh:
@@ -657,48 +910,79 @@ def api(name, b):
         dest = os.path.join(parent, leaf)
         if os.path.exists(dest):
             raise ApiError('Folder already exists: %s' % dest)
-        G(parent, ['clone', url, dest], fail=True)
+        G(parent, ['clone', '--progress', url, dest], fail=True, live='clone')
         return {'path': add_repo(dest)}
 
     if name == 'status':
         require_repo(repo)
-        r = G(repo, ['status', '--porcelain=v1', '-z', '--untracked-files=all'], fail=True)
+        # One git call gives branch, upstream, ahead/behind, HEAD and every changed file (porcelain v2).
+        r = G(repo, ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'], fail=True)
         parts = r.out.split('\0')
         i, files = 0, []
+        oid, branch, upstream, ahead, behind = '', '(detached HEAD)', None, 0, 0
         while i < len(parts):
             e = parts[i]
             i += 1
-            if len(e) < 4:
+            if len(e) < 3:
                 continue
-            x, y, orig = e[0], e[1], None
-            if x in 'RC' or y in 'RC':
+            if e[0] == '#':
+                if e.startswith('# branch.oid '):
+                    oid = e[13:]
+                elif e.startswith('# branch.head '):
+                    if e[14:] != '(detached)':
+                        branch = e[14:]
+                elif e.startswith('# branch.upstream '):
+                    upstream = e[18:]
+                elif e.startswith('# branch.ab '):
+                    m = re.match(r'# branch\.ab \+(\d+) -(\d+)', e)
+                    if m:
+                        ahead, behind = int(m.group(1)), int(m.group(2))
+                continue
+            kind, xy, path, orig = e[0], None, None, None
+            if kind == '1':
+                f = e.split(' ', 8)
+                xy, path = f[1], f[8]
+            elif kind == '2':
+                f = e.split(' ', 9)
+                xy, path = f[1], f[9]
                 orig = parts[i] if i < len(parts) else None
                 i += 1
+            elif kind == 'u':
+                f = e.split(' ', 10)
+                xy, path = f[1], f[10]
+            elif kind == '?':
+                xy, path = '??', e[2:]
+            if not path:
+                continue
             m = None
             if len(files) < 500:  # mtime+size lets the UI notice edits to files that were already modified
                 try:
-                    stt = os.stat(os.path.join(repo, e[3:]))
+                    stt = os.stat(os.path.join(repo, path))
                     m = '%d-%d' % (stt.st_mtime_ns // 1000, stt.st_size)
                 except OSError:
                     pass
-            files.append({'path': e[3:], 'x': x, 'y': y, 'orig': orig, 'm': m})
-        br = G(repo, ['symbolic-ref', '--short', '-q', 'HEAD'])
-        branch = br.out.strip() if br.code == 0 else '(detached HEAD)'
-        has = has_head(repo)
-        upstream = upstream_of(repo)
-        ahead = behind = 0
-        if upstream:
-            c = G(repo, ['rev-list', '--left-right', '--count', 'HEAD...@{u}']).out.strip().split()
-            if len(c) >= 2:
-                ahead, behind = int(c[0]), int(c[1])
-        remote = first_line(G(repo, ['remote']).out)
-        rurl = G(repo, ['remote', 'get-url', remote]).out.strip() if remote else None
-        last = G(repo, ['log', '-1', '--format=%s']).out.strip() if has else None
-        mh = G(repo, ['rev-parse', '--git-path', 'MERGE_HEAD']).out.strip()
-        merging = bool(mh) and os.path.exists(mh if os.path.isabs(mh) else os.path.join(repo, mh))
-        head = G(repo, ['rev-parse', 'HEAD']).out.strip() if has else ''
+            files.append({'path': path, 'x': xy[0].replace('.', ' '), 'y': xy[1].replace('.', ' '), 'orig': orig, 'm': m})
+        has = bool(oid) and oid != '(initial)'
+        head = oid if has else ''
+
+        # Remote URL and last commit subject change rarely: cache them instead of spawning git on every poll.
+        rc = CACHE['remote'].get(repo)
+        if rc is None or time.time() - rc[0] > 20:
+            remote = first_line(G(repo, ['remote']).out)
+            rurl = G(repo, ['remote', 'get-url', remote]).out.strip() if remote else None
+            rc = (time.time(), remote, rurl)
+            CACHE['remote'][repo] = rc
+        sc = CACHE['subject'].get(repo)
+        if sc is None or sc[0] != head:
+            sc = (head, G(repo, ['log', '-1', '--format=%s']).out.strip() if has else None)
+            CACHE['subject'][repo] = sc
+        gd = CACHE['gitdir'].get(repo)
+        if gd is None:
+            gd = G(repo, ['rev-parse', '--absolute-git-dir']).out.strip()
+            CACHE['gitdir'][repo] = gd
+        merging = bool(gd) and os.path.exists(os.path.join(gd, 'MERGE_HEAD'))
         return {'branch': branch, 'head': head, 'hasCommits': has, 'upstream': upstream, 'ahead': ahead, 'behind': behind,
-                'remote': remote, 'remoteUrl': mask(rurl), 'webUrl': to_web_url(rurl), 'lastSubject': last,
+                'remote': rc[1], 'remoteUrl': mask(rc[2]), 'webUrl': to_web_url(rc[2]), 'lastSubject': sc[1],
                 'merging': merging, 'files': files}
 
     if name == 'stage':
@@ -842,19 +1126,19 @@ def api(name, b):
         return {'ok': True, 'out': r.out}
 
     if name == 'fetch':
-        r = G(repo, ['fetch', '--all', '--prune'], fail=True)
+        r = G(repo, ['fetch', '--all', '--prune', '--progress'], fail=True, live='' if b.get('quiet') else 'fetch')
         return {'ok': True, 'out': r.out + r.err}
     if name == 'pull':
-        r = G(repo, ['pull', '--no-edit'], fail=True)
+        r = G(repo, ['pull', '--no-edit', '--progress'], fail=True, live='pull')
         return {'ok': True, 'out': r.out + r.err}
     if name == 'push':
         if upstream_of(repo):
-            r = G(repo, ['push'], fail=True)
+            r = G(repo, ['push', '--progress'], fail=True, live='push')
         else:
             remote = first_line(G(repo, ['remote']).out)
             if not remote:
                 raise ApiError('No remote configured. Use "Publish repository" first.')
-            r = G(repo, ['push', '-u', remote, 'HEAD'], fail=True)
+            r = G(repo, ['push', '--progress', '-u', remote, 'HEAD'], fail=True, live='push')
         return {'ok': True, 'out': r.out + r.err}
 
     if name == 'addRemote':
@@ -866,7 +1150,7 @@ def api(name, b):
         if not gh:
             raise ApiError('GitHub CLI (gh) is needed to create repositories. Install it from the menu.')
         vis = '--private' if b.get('private') else '--public'
-        r = invoke_exe(gh, repo, ['repo', 'create', str(b.get('name')), vis, '--source', '.', '--remote', 'origin', '--push'])
+        r = invoke_live(gh, repo, ['repo', 'create', str(b.get('name')), vis, '--source', '.', '--remote', 'origin', '--push'], 'publish')
         if r.code != 0:
             raise ApiError((r.err + r.out).strip())
         return {'ok': True, 'out': r.out + r.err}
@@ -874,17 +1158,20 @@ def api(name, b):
     if name == 'open':
         what = str(b.get('what'))
         if what == 'explorer':
-            xdg = shutil.which('xdg-open')
-            if not xdg:
-                raise ApiError('xdg-open was not found.')
-            spawn([xdg, repo])
+            op = opener()
+            if not op:
+                raise ApiError('%s was not found.' % ('open' if IS_MAC else 'xdg-open'))
+            spawn([op, repo])
         elif what == 'terminal':
             open_terminal(repo)
         elif what == 'code':
-            code = shutil.which('code') or shutil.which('codium')
-            if not code:
+            code = find_exe('code') or shutil.which('codium')
+            if code:
+                spawn([code, repo])
+            elif IS_MAC and os.path.isdir('/Applications/Visual Studio Code.app'):
+                spawn(['open', '-a', 'Visual Studio Code', repo])
+            else:
                 raise ApiError('VS Code ("code") was not found in PATH.')
-            spawn([code, repo])
         elif what == 'url':
             u = str(b.get('url') or '')
             if not re.match(r'^https://[A-Za-z0-9.-]+(:\d+)?(/[^\s"<>^|&`]*)?$', u):
@@ -975,8 +1262,12 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw.decode('utf-8')) if raw.strip() else {}
             if not isinstance(body, dict):
                 body = {}
-            with API_LOCK:
-                res = api(path[5:], body)
+            name = path[5:]
+            if name in ('progress', 'ping'):   # never wait behind a long operation: they report on it
+                res = api(name, body)
+            else:
+                with API_LOCK:
+                    res = api(name, body)
             self.send_json(200, res)
         except ApiError as e:
             self.send_json(400, {'error': mask(str(e))})
@@ -984,7 +1275,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(400, {'error': mask(str(e))})
 
 
+MAC_BROWSERS = (
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+)
+
+
 def launch_window(url):
+    if IS_MAC:
+        # Chromium-based browsers can open a chrome-less "app" window; otherwise use the default browser.
+        for p in MAC_BROWSERS:
+            if os.path.exists(p):
+                spawn([p, '--app=' + url, '--window-size=1300,820'])
+                return
+        open_url(url)
+        return
     for exe in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge',
                 'microsoft-edge-stable', 'brave-browser'):
         p = shutil.which(exe)
@@ -995,7 +1302,8 @@ def launch_window(url):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='GitHub Helper (Linux)')
+    ap = argparse.ArgumentParser(description='GitHub Helper (Linux / macOS)')
+    ap.add_argument('--build-app', nargs='?', const='dist', metavar='DIR', help='macOS: build a self-contained "GitHub Helper.app" into DIR (default: dist) and exit')
     ap.add_argument('--port', type=int, default=47321, help='port for the local server (default 47321)')
     ap.add_argument('--no-browser', action='store_true', help='do not open a window automatically')
     ap.add_argument('--no-autoexit', action='store_true', help='keep running after the window is closed')
@@ -1004,6 +1312,10 @@ def main():
     ap.add_argument('--no-shortcut', action='store_true', help='do not add GitHub Helper to the application menu')
     ap.add_argument('--restarted', action='store_true', help=argparse.SUPPRESS)   # set by the updater
     args = ap.parse_args()
+    if args.build_app:
+        os.makedirs(args.build_app, exist_ok=True)
+        print('Built ' + build_mac_app(os.path.abspath(args.build_app), standalone=True))
+        return 0
     OPTIONS['no_update'] = args.no_update
     if not args.no_shortcut and not args.restarted:
         ensure_desktop_entry()

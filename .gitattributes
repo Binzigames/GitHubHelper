@@ -2,3 +2,4 @@
 *.py text eol=lf
 /start.cmd text eol=lf
 windows/*.cmd text eol=crlf
+*.command text eol=lf
