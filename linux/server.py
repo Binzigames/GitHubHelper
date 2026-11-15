@@ -492,6 +492,15 @@ def check_update():
             res['available'] = b > a
     except Exception:  # noqa: BLE001
         pass
+    # A git checkout with local changes is never auto-updated: report it as "manual" instead of failing later.
+    if res['available'] and os.path.exists(os.path.join(APP_ROOT, '.git')):
+        try:
+            dirty = bool(G(APP_ROOT, ['status', '--porcelain'], fail=True).out.strip())
+        except Exception:  # noqa: BLE001
+            dirty = True
+        if dirty:
+            res['available'] = False
+            res['manual'] = True
     return res
 
 

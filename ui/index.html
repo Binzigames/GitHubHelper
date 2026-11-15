@@ -168,7 +168,7 @@ const I18N = { en: {
   'Видалити гілку "{name}"?': 'Delete branch "{name}"?', 'Видалити примусово?': 'Force delete?', 'Гілку видалено': 'Branch deleted',
   'Нова гілка': 'New branch', 'Назва (від поточної: {cur})': 'Name (from current: {cur})', 'Гілку створено': 'Branch created',
   'Відкрити на GitHub': 'Open on GitHub', 'Вигляд': 'Appearance', 'Тема': 'Theme', 'Системна': 'System', 'Темна': 'Dark', 'Світла': 'Light', 'Акцентний колір': 'Accent color', 'Свій колір': 'Custom color', 'Розмір тексту': 'Text size', 'Розмір коду (diff)': 'Code size (diff)', 'Щільність списків': 'List density', 'Компактно': 'Compact', 'Звичайно': 'Normal', 'Просторо': 'Roomy', 'Скинути': 'Reset', 'Репозиторій на GitHub': 'GitHub repository', 'Відкрити': 'Open', 'Немає remote': 'No remote', 'Створити Pull Request': 'Create Pull Request',
-  'Перевірка оновлень…': 'Checking for updates…', 'Знайдено оновлення v{v}. Встановлення…': 'Update v{v} found. Installing…', 'Перезапуск…': 'Restarting…', 'Запуск…': 'Starting…', 'Не вдалося оновитися: ': 'Update failed: ',
+  'Перевірка оновлень…': 'Checking for updates…', 'Знайдено оновлення v{v}. Встановлення…': 'Update v{v} found. Installing…', 'Перезапуск…': 'Restarting…', 'Доступна нова версія v{v}. У цій копії є локальні зміни — оновіть вручну: git pull': 'New version v{v} is available. This copy has local changes — update manually: git pull', 'Запуск…': 'Starting…', 'Не вдалося оновитися: ': 'Update failed: ',
   'Ваші репозиторії': 'Your repositories', 'Або додайте новий': 'Or add a new one', 'востаннє': 'last opened', 'Вітальний екран': 'Welcome screen',
   '📝 Перегляд змін і коміти в кілька кліків': '📝 Review changes and commit in a few clicks', '🌿 Гілки, історія та злиття': '🌿 Branches, history and merging', '☁️ Синхронізація і публікація на GitHub': '☁️ Sync and publish to GitHub',
   'Відкрити у Провіднику': 'Open in Explorer', 'Відкрити у файловому менеджері': 'Open in file manager', 'Відкрити в VS Code': 'Open in VS Code', 'Відкрити термінал': 'Open terminal',
@@ -647,6 +647,7 @@ async function startup() {
   splashMsg(t('Перевірка оновлень…'));
   let info = null;
   try { info = await api('updateCheck'); } catch (e) { }
+  if (info && info.manual) setTimeout(() => toast(t('Доступна нова версія v{v}. У цій копії є локальні зміни — оновіть вручну: git pull', { v: info.latest })), 1800);
   if (info && info.available) {
     splashMsg(t('Знайдено оновлення v{v}. Встановлення…', { v: info.latest }));
     try {

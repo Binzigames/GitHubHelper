@@ -217,6 +217,12 @@ function Check-Update {
         $a = ConvertTo-Ver $cur; $b = ConvertTo-Ver $latest
         if ($a -and $b) { $res.latest = $latest; $res.available = ($b -gt $a) }
     } catch { }
+    # A git checkout with local changes is never auto-updated: report it as "manual" instead of failing later.
+    if ($res.available -and (Test-Path -LiteralPath (Join-Path $AppRoot '.git'))) {
+        $dirty = $true
+        try { $st = G $AppRoot @('status', '--porcelain'); $dirty = ($st.code -ne 0 -or [bool]$st.out.Trim()) } catch { }
+        if ($dirty) { $res.available = $false; $res.manual = $true }
+    }
     return $res
 }
 # Git checkouts are updated with a fast-forward pull (never touching local changes); plain downloads get the new zip.
