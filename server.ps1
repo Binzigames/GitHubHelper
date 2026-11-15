@@ -581,11 +581,13 @@ function Send($ctx, [int]$code, [byte[]]$bytes, [string]$ctype) {
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $lastRequest = Get-Date
 $seen = $false
+$script:byeAt = $null
 try {
     while ($listener.IsListening) {
         $task = $listener.GetContextAsync()
         while (-not $task.Wait(1000)) {
-            if ($seen -and ((Get-Date) - $lastRequest).TotalMinutes -gt 10) { Write-Host 'Idle for 10 minutes - exiting.'; return }
+            if ($seen -and ((Get-Date) - $lastRequest).TotalSeconds -gt 30) { Write-Host 'Window closed (no heartbeat for 30 s) - exiting.'; return }
+            if (($script:byeAt) -and ((Get-Date) - $script:byeAt).TotalSeconds -gt 2) { Write-Host 'Window closed - exiting.'; return }
         }
         $ctx = $task.Result
         $req = $ctx.Request
@@ -594,7 +596,7 @@ try {
             if ($hostH -ne "127.0.0.1:$Port" -and $hostH -ne "localhost:$Port") { Send $ctx 403 $utf8.GetBytes('bad host') 'text/plain'; continue }
             $path = $req.Url.AbsolutePath
             if ($req.HttpMethod -eq 'GET' -and $path -eq '/') {
-                $seen = $true; $lastRequest = Get-Date
+                $seen = $true; $script:byeAt = $null; $lastRequest = Get-Date
                 $html = (Get-Content (Join-Path $Root 'index.html') -Raw -Encoding UTF8).Replace('__TOKEN__', $token)
                 Send $ctx 200 $utf8.GetBytes($html) 'text/html; charset=utf-8'
             }
@@ -604,6 +606,8 @@ try {
                 if ($origin -and $origin -ne "http://127.0.0.1:$Port" -and $origin -ne "http://localhost:$Port") { Send $ctx 403 $utf8.GetBytes('{"error":"bad origin"}') 'application/json'; continue }
                 if ($req.ContentLength64 -gt 5MB) { Send $ctx 413 $utf8.GetBytes('{"error":"too large"}') 'application/json'; continue }
                 $lastRequest = Get-Date
+                if ($path -eq "/api/bye") { $script:byeAt = Get-Date; Send $ctx 200 $utf8.GetBytes("{}") "application/json"; continue }
+                $script:byeAt = $null
                 $sr = New-Object System.IO.StreamReader($req.InputStream, $utf8)
                 $raw = $sr.ReadToEnd()
                 $body = if ($raw) { $raw | ConvertFrom-Json } else { [pscustomobject]@{} }

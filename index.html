@@ -6,10 +6,11 @@
 <title>GitHub Helper</title>
 <style>
 :root{--bg:#0b0f14;--panel:#12171e;--panel2:#1a212b;--line:#262e3a;--text:#e8eef5;--mute:#8693a3;--accent:#4c8dff;--accent2:#8b5cf6;--green:#3fb950;--red:#ff6b64;--yellow:#e3b341;--addbg:rgba(46,160,67,.16);--delbg:rgba(248,81,73,.15);--shadow:0 12px 40px rgba(0,0,0,.45);--r:10px}
-@media (prefers-color-scheme:light){:root{--bg:#f4f6fa;--panel:#fff;--panel2:#eef1f6;--line:#dde3ec;--text:#1b2330;--mute:#5f6c7d;--accent:#2563eb;--accent2:#7c3aed;--green:#1a7f37;--red:#d1242f;--yellow:#9a6700;--addbg:#e3f8e9;--delbg:#ffe8e6;--shadow:0 12px 40px rgba(20,30,50,.18)}}
+@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f4f6fa;--panel:#fff;--panel2:#eef1f6;--line:#dde3ec;--text:#1b2330;--mute:#5f6c7d;--accent:#2563eb;--accent2:#7c3aed;--green:#1a7f37;--red:#d1242f;--yellow:#9a6700;--addbg:#e3f8e9;--delbg:#ffe8e6;--shadow:0 12px 40px rgba(20,30,50,.18)}}
+:root[data-theme=light]{--bg:#f4f6fa;--panel:#fff;--panel2:#eef1f6;--line:#dde3ec;--text:#1b2330;--mute:#5f6c7d;--accent:#2563eb;--accent2:#7c3aed;--green:#1a7f37;--red:#d1242f;--yellow:#9a6700;--addbg:#e3f8e9;--delbg:#ffe8e6;--shadow:0 12px 40px rgba(20,30,50,.18)}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{background:radial-gradient(1200px 500px at 85% -10%,rgba(76,141,255,.10),transparent 60%),var(--bg);color:var(--text);font:14px/1.45 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(1200px 500px at 85% -10%,rgba(76,141,255,.10),transparent 60%),var(--bg);color:var(--text);font:var(--fs,14px)/1.45 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
 ::selection{background:rgba(76,141,255,.35)}
 ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:var(--mute);background-clip:content-box;border:2px solid transparent}
 button,input,textarea{font:inherit;color:inherit}
@@ -37,7 +38,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 
 .tab:hover{background:var(--panel2)}
 .tab.on{color:var(--text);border-image:linear-gradient(90deg,var(--accent),var(--accent2)) 1;font-weight:600}
 .list{flex:1;overflow:auto;min-height:0}
-.row{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;border-left:3px solid transparent;transition:background .12s}
+.row{display:flex;align-items:center;gap:8px;padding:var(--rp,7px) 12px;cursor:pointer;border-left:3px solid transparent;transition:background .12s}
 .row:hover{background:var(--panel2)}
 .row.sel{background:rgba(76,141,255,.14);border-left-color:var(--accent)}
 .row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -55,7 +56,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 
 .chip{border:1px solid var(--line);border-radius:14px;padding:2px 10px;font-size:12px;cursor:pointer;transition:background .15s}
 .chip:hover{background:var(--panel2)}
 .chip.sel{background:var(--accent);border-color:var(--accent);color:#fff}
-#diff{flex:1;overflow:auto;font:12.5px/1.5 "Cascadia Mono",Consolas,monospace;min-height:0}
+#diff{flex:1;overflow:auto;font:var(--dfs,12.5px)/1.5 "Cascadia Mono",Consolas,monospace;min-height:0}
 .empty{color:var(--mute);text-align:center;margin-top:18vh;padding:0 20px}
 table.d{border-collapse:collapse;width:100%}
 table.d td{padding:0 10px;white-space:pre;vertical-align:top}
@@ -79,6 +80,14 @@ tr.meta td{color:var(--mute)}
 .dlg label{display:block;margin:10px 0 4px;color:var(--mute);font-size:12px}
 .dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
 .dlg .fr{display:flex;gap:6px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;border:0;border-radius:0;background:transparent}
+.seg button.on{background:var(--accent);color:#fff}
+.sw{display:flex;gap:10px;align-items:center}
+.sw button{width:30px;height:30px;padding:0;border-radius:50%;border:2px solid transparent}
+.sw button.on,.sw input.on{outline:2px solid var(--text);outline-offset:2px}
+.sw input[type=color]{width:30px;height:30px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer}
+.dlg input[type=range]{width:100%;accent-color:var(--accent)}
 .welcome{margin:auto;text-align:center;max-width:500px;padding:20px}
 .welcome h1{font-weight:700;font-size:34px;margin:10px 0 6px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
 .welcome .logo{width:76px;height:76px;margin:0 auto;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:38px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 14px 40px rgba(76,141,255,.4)}
@@ -140,7 +149,7 @@ const I18N = { en: {
   'Перемкнено на {name}': 'Switched to {name}', 'Влити "{name}" у "{cur}"?': 'Merge "{name}" into "{cur}"?', 'Злито': 'Merged',
   'Видалити гілку "{name}"?': 'Delete branch "{name}"?', 'Видалити примусово?': 'Force delete?', 'Гілку видалено': 'Branch deleted',
   'Нова гілка': 'New branch', 'Назва (від поточної: {cur})': 'Name (from current: {cur})', 'Гілку створено': 'Branch created',
-  'Відкрити на GitHub': 'Open on GitHub', 'Немає remote': 'No remote', 'Створити Pull Request': 'Create Pull Request',
+  'Відкрити на GitHub': 'Open on GitHub', 'Вигляд': 'Appearance', 'Тема': 'Theme', 'Системна': 'System', 'Темна': 'Dark', 'Світла': 'Light', 'Акцентний колір': 'Accent color', 'Свій колір': 'Custom color', 'Розмір тексту': 'Text size', 'Розмір коду (diff)': 'Code size (diff)', 'Щільність списків': 'List density', 'Компактно': 'Compact', 'Звичайно': 'Normal', 'Просторо': 'Roomy', 'Скинути': 'Reset', 'Репозиторій на GitHub': 'GitHub repository', 'Відкрити': 'Open', 'Немає remote': 'No remote', 'Створити Pull Request': 'Create Pull Request',
   'Відкрити у Провіднику': 'Open in Explorer', 'Відкрити в VS Code': 'Open in VS Code', 'Відкрити термінал': 'Open terminal',
   'Stash (відкласти зміни)': 'Stash (set changes aside)', 'Stash pop (повернути)': 'Stash pop (restore)', 'Повернуто': 'Restored',
   'Скасувати останній коміт (залишити зміни)': 'Undo last commit (keep changes)',
@@ -184,6 +193,51 @@ const t = (k, p) => {
   let s = (LANG === 'en' && I18N.en[k]) || k;
   return p ? s.replace(/\{(\w+)\}/g, (_, n) => p[n] ?? '') : s;
 };
+/* ---------- UI customizer ---------- */
+const UI_DEFAULT = { theme: 'system', accent: 'blue', custom: '#4c8dff', fs: 14, dfs: 12.5, density: 'normal' };
+const ACCENTS = { blue: ['#4c8dff', '#8b5cf6'], green: ['#2ea043', '#14b8a6'], orange: ['#f08c1f', '#ef4444'], pink: ['#ec4899', '#a855f7'], teal: ['#14b8a6', '#3b82f6'], red: ['#ef4444', '#f97316'] };
+const DENS = { compact: 3, normal: 7, roomy: 11 };
+let UI = { ...UI_DEFAULT };
+try { UI = { ...UI_DEFAULT, ...JSON.parse(localStorage.getItem('ui') || '{}') }; } catch (e) { }
+function applyUI() {
+  const d = document.documentElement, st = d.style;
+  if (UI.theme === 'system') d.removeAttribute('data-theme'); else d.setAttribute('data-theme', UI.theme);
+  if (UI.accent === 'blue') { st.removeProperty('--accent'); st.removeProperty('--accent2'); }
+  else {
+    const c = UI.accent === 'custom' ? [UI.custom, UI.custom] : ACCENTS[UI.accent] || ACCENTS.blue;
+    st.setProperty('--accent', c[0]); st.setProperty('--accent2', c[1]);
+  }
+  st.setProperty('--fs', UI.fs + 'px'); st.setProperty('--dfs', UI.dfs + 'px'); st.setProperty('--rp', (DENS[UI.density] ?? 7) + 'px');
+}
+function saveUI() { try { localStorage.setItem('ui', JSON.stringify(UI)); } catch (e) { } applyUI(); }
+applyUI();
+function openCustomizer() {
+  closePops();
+  const ov = document.createElement('div'); ov.className = 'ov';
+  const draw = () => {
+    const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-k="${key}" data-v="${v}" class="${String(UI[key]) === String(v) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
+    ov.innerHTML = `<div class="dlg"><h3>🎨 ${esc(t('Вигляд'))}</h3>
+      <label>${esc(t('Тема'))}</label>${seg('theme', [['system', t('Системна')], ['dark', t('Темна')], ['light', t('Світла')]])}
+      <label>${esc(t('Акцентний колір'))}</label>
+      <div class="sw">${Object.keys(ACCENTS).map(k => `<button data-k="accent" data-v="${k}" class="${UI.accent === k ? 'on' : ''}" style="background:linear-gradient(135deg,${ACCENTS[k][0]},${ACCENTS[k][1]})" title="${k}"></button>`).join('')}
+        <input type="color" id="uiCustom" value="${esc(UI.custom)}" title="${esc(t('Свій колір'))}" class="${UI.accent === 'custom' ? 'on' : ''}"></div>
+      <label>${esc(t('Розмір тексту'))}: ${UI.fs}px</label><input type="range" id="uiFs" min="12" max="18" step="1" value="${UI.fs}">
+      <label>${esc(t('Розмір коду (diff)'))}: ${UI.dfs}px</label><input type="range" id="uiDfs" min="11" max="18" step="0.5" value="${UI.dfs}">
+      <label>${esc(t('Щільність списків'))}</label>${seg('density', [['compact', t('Компактно')], ['normal', t('Звичайно')], ['roomy', t('Просторо')]])}
+      <div class="acts"><button id="uiReset">${esc(t('Скинути'))}</button><button class="primary" id="uiOk">${esc(t('Готово'))}</button></div></div>`;
+    ov.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { UI[b.dataset.k] = b.dataset.k === 'fs' ? +b.dataset.v : b.dataset.v; saveUI(); draw(); });
+    ov.querySelector('#uiCustom').oninput = e => { UI.custom = e.target.value; UI.accent = 'custom'; saveUI(); };
+    ov.querySelector('#uiCustom').onchange = draw;
+    ov.querySelector('#uiFs').oninput = e => { UI.fs = +e.target.value; saveUI(); e.target.previousElementSibling.textContent = t('Розмір тексту') + ': ' + UI.fs + 'px'; };
+    ov.querySelector('#uiDfs').oninput = e => { UI.dfs = +e.target.value; saveUI(); e.target.previousElementSibling.textContent = t('Розмір коду (diff)') + ': ' + UI.dfs + 'px'; };
+    ov.querySelector('#uiReset').onclick = () => { UI = { ...UI_DEFAULT }; saveUI(); draw(); };
+    ov.querySelector('#uiOk').onclick = () => ov.remove();
+  };
+  ov.addEventListener('mousedown', e => { if (e.target === ov) ov.remove(); });
+  ov.addEventListener('keydown', e => { if (e.key === 'Escape') ov.remove(); });
+  document.body.appendChild(ov); draw();
+}
+
 function setLang(l) {
   LANG = l; try { localStorage.setItem('lang', l); } catch (e) { }
   document.documentElement.lang = l;
@@ -310,6 +364,13 @@ async function refresh(force) {
 }
 setInterval(() => { if (document.hasFocus() && !S.busy && S.repo) refresh(false); }, 3000);
 window.addEventListener('focus', () => refresh(false));
+// Heartbeat: the server shuts itself down when the window is closed and pings stop.
+setInterval(() => { api('state').catch(() => { }); }, 3000);
+// Tell the server right away when the window closes (it waits ~2 s in case this is just a reload).
+window.addEventListener('pagehide', () => { try { fetch('/api/bye', { method: 'POST', keepalive: true, headers: { 'X-Token': TOKEN, 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) { } });
+// Periodic refresh of the working tree, plus a background fetch every 2 minutes (updates ahead/behind).
+setInterval(() => { if (!document.hidden && !S.busy) refresh(false); }, 10000);
+setInterval(async () => { if (S.repo && S.st && S.st.remote && !S.busy) { try { await R('fetch'); await refresh(false); } catch (e) { } } }, 120000);
 
 /* ---------- render ---------- */
 function renderAll() { renderTop(); renderSide(); if (!S.repo) renderWelcome(); }
@@ -331,14 +392,18 @@ function renderTop() {
     <button class="tb" id="bBranch" ${S.repo ? '' : 'disabled'}><small>${esc(t('Гілка'))}</small><b>${s ? esc(s.branch) : '—'} ▾</b></button>
     <button class="tb" id="bSync" ${S.repo ? '' : 'disabled'} style="min-width:190px"><small>${S.busy ? esc(t('Зачекайте…')) : esc(si.sub || t('синхронізація'))}</small><b>${S.busy ? '<span class="spin"></span>' + esc(S.busy) : '⟳ ' + esc(si.label)}</b></button>
     <div class="spacer"></div>
+    ${s && s.webUrl ? `<button class="tb" id="bWeb" style="min-width:130px;border-left:1px solid var(--line)" title="${esc(s.webUrl)}"><small>${esc(t('Репозиторій на GitHub'))}</small><b>↗ ${esc(t('Відкрити'))}</b></button>` : ''}
     <button class="tb" id="bGh" style="min-width:130px;border-left:1px solid var(--line)" title="${esc(t('Вхід у GitHub / вихід'))}"><small>GitHub</small><b>${a.ghAuthed ? '✓ @' + esc(a.ghUser || '') : esc(t('Увійти'))}</b></button>
-    <button class="tb" id="bLang" style="min-width:60px;align-items:center" title="${esc(t('Мова / Language'))}"><b>${LANG === 'en' ? 'EN' : 'UA'}</b></button>
+    <button class="tb" id="bUi" style="min-width:60px;align-items:center" title="${esc(t('Вигляд'))}"><b>🎨</b></button>
+    <button class="tb" id="bLang"style="min-width:60px;align-items:center" title="${esc(t('Мова / Language'))}"><b>${LANG === 'en' ? 'EN' : 'UA'}</b></button>
     <button class="tb" id="bMenu" style="border-right:0;min-width:60px;align-items:center" ${S.repo ? '' : 'disabled'}><b>⋯</b></button>`;
   $('#bRepo').onclick = e => { e.stopPropagation(); togglePop('popRepo', renderRepoPop); };
   $('#bBranch').onclick = e => { e.stopPropagation(); togglePop('popBranch', renderBranchPop); };
   $('#bMenu').onclick = e => { e.stopPropagation(); togglePop('popMenu', renderMenuPop); };
   $('#bSync').onclick = doSync;
   $('#bGh').onclick = ghToggle;
+  $('#bUi').onclick = openCustomizer;
+  if ($('#bWeb')) $('#bWeb').onclick = () => api('open', { what: 'url', url: S.st.webUrl }).catch(e => toast(e.message, true));
   $('#bLang').onclick = () => setLang(LANG === 'en' ? 'uk' : 'en');
   const b = $('#popBranch'); const rb = $('#bBranch').getBoundingClientRect(); b.style.left = rb.left + 'px';
 }

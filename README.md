@@ -41,7 +41,7 @@ It runs **entirely on your machine**. There is no cloud service, no telemetry an
 | 📦 **Stash & undo** | Stash/pop work in progress, undo the last commit (keeping your changes), abort a merge. |
 | 🚀 **Quick actions** | Open on GitHub, create a Pull Request, open in Explorer, VS Code or a terminal. |
 | 🌍 **Bilingual** | English and Ukrainian interface, switchable on the fly. |
-| 🌗 **Light & dark** | Follows your system theme automatically. |
+| 🎨 **Customizable UI** | Pick a theme (system / dark / light), an accent color, text and code size, and list density — saved automatically. |
 
 ## Screenshots
 
@@ -51,7 +51,8 @@ It runs **entirely on your machine**. There is no cloud service, no telemetry an
     <td width="50%"><img src="docs/screenshots/branches.png" alt="Branch switcher"><br><sub><b>Branches</b> — filter, switch and create branches</sub></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/menu.png" alt="Quick actions menu"><br><sub><b>Quick actions</b> — stash, undo, open in your editor or on GitHub</sub></td>
+    <td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance customizer"><br><sub><b>Appearance</b> — theme, accent color, sizes and density</sub></td>
+    <td width="50%"><img src="docs/screenshots/menu.png" alt="Quick actions menu"><br><sub><b>Quick actions</b> — stash, undo, open in your editor or on GitHub</sub></td>
   </tr>
 </table>
 
@@ -114,7 +115,7 @@ GitHub Helper is designed to be safe to run on a personal machine:
 - A strict **Content-Security-Policy** and anti-framing headers are sent with every response.
 - Secrets in command output are **masked** before being shown in the UI.
 - Authentication is delegated to the official **GitHub CLI** — the app never sees or stores your password.
-- The server exits automatically after **10 minutes of inactivity**.
+- The server exits automatically within seconds of closing the window, so nothing is left running in the background.
 
 ## Contributing
 
