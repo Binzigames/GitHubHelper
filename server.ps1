@@ -363,6 +363,7 @@ function Api([string]$name, $b) {
                 if ($c.Count -ge 2) { $ahead = [int]$c[0]; $behind = [int]$c[1] }
             }
             $remote = (G $repo @('remote')).out.Trim() -split "`r?`n" | Where-Object { $_ } | Select-Object -First 1
+            if (-not $remote) { $remote = $null }  # avoid AutomationNull serializing as {} (truthy in JS)
             $rurl = if ($remote) { (G $repo @('remote', 'get-url', $remote)).out.Trim() } else { $null }
             $last = if ($has) { (G $repo @('log', '-1', '--format=%s')).out.Trim() } else { $null }
             $merging = Test-Path -LiteralPath (Join-Path $repo '.git\MERGE_HEAD')
